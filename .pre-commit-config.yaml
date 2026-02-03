@@ -1,0 +1,95 @@
+# Pre-commit hooks configuration
+# Install: uv run pre-commit install
+# Run all: uv run pre-commit run --all-files
+
+default_language_version:
+  python: python3.11
+
+repos:
+  # ===========================================
+  # General file checks
+  # ===========================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
+
+  # ===========================================
+  # Ruff - Fast Python linter & formatter
+  # ===========================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      # Linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Formatter (replaces black)
+      - id: ruff-format
+
+  # ===========================================
+  # Mypy - Static type checking
+  # ===========================================
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.0.0
+          - typer>=0.12.0
+          - types-requests
+        args: [--config-file=pyproject.toml]
+        pass_filenames: false
+        entry: bash -c 'mypy src/'
+
+  # ===========================================
+  # Vulture - Dead code detection
+  # ===========================================
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.11
+    hooks:
+      - id: vulture
+        args: [src/bilingualsub, --min-confidence=80]
+
+  # ===========================================
+  # Prettier - Frontend code formatting
+  # ===========================================
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, yaml, markdown, html, css]
+        exclude: ^(\.github/|tests/|htmlcov/)
+
+  # ===========================================
+  # Security checks
+  # ===========================================
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: package.lock.json
+
+  # ===========================================
+  # Commit message format
+  # ===========================================
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.27.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+ci:
+  autofix_commit_msg: "style: auto-fix by pre-commit hooks"
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
