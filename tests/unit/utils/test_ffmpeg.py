@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bilingualsub.utils.ffmpeg import FFmpegError, burn_subtitles
+from bilingualsub.utils.ffmpeg import FFmpegError, burn_subtitles, extract_audio
 
 
 class TestBurnSubtitles:
@@ -300,3 +300,101 @@ class TestBurnSubtitles:
         call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
         assert str(subtitle_path) in call_kwargs["vf"]
         assert result == output_path
+
+
+class TestExtractAudio:
+    """Test cases for extract_audio function."""
+
+    @pytest.fixture
+    def mock_ffmpeg(self):
+        """Mock ffmpeg module."""
+        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock:
+            mock_stream = MagicMock()
+            mock.input.return_value = mock_stream
+            mock_stream.output.return_value = mock_stream
+            mock_stream.overwrite_output.return_value = mock_stream
+            mock_stream.run.return_value = None
+            yield mock
+
+    @pytest.mark.unit
+    def test_extract_audio_success(self, tmp_path, mock_ffmpeg):
+        """Given valid video, when extracting audio, then calls ffmpeg correctly."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "audio.mp3"
+
+        result = extract_audio(video_path, output_path)
+
+        mock_ffmpeg.input.assert_called_once_with(str(video_path))
+        call_args = mock_ffmpeg.input.return_value.output.call_args
+        assert call_args[0] == (str(output_path),)
+        assert call_args[1]["acodec"] == "libmp3lame"
+        assert call_args[1]["audio_bitrate"] == "64k"
+        assert "vn" in call_args[1]
+        assert result == output_path
+
+    @pytest.mark.unit
+    def test_extract_audio_custom_bitrate(self, tmp_path, mock_ffmpeg):
+        """Given custom bitrate, when extracting audio, then uses it."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "audio.mp3"
+
+        extract_audio(video_path, output_path, bitrate="128k")
+
+        call_args = mock_ffmpeg.input.return_value.output.call_args
+        assert call_args[1]["audio_bitrate"] == "128k"
+
+    @pytest.mark.unit
+    def test_extract_audio_video_not_found(self, tmp_path):
+        """Given non-existent video, when extracting audio, then raises FFmpegError."""
+        video_path = tmp_path / "nonexistent.mp4"
+        output_path = tmp_path / "audio.mp3"
+
+        with pytest.raises(FFmpegError, match="Video file does not exist"):
+            extract_audio(video_path, output_path)
+
+    @pytest.mark.unit
+    def test_extract_audio_video_is_directory(self, tmp_path):
+        """Given directory as video, when extracting audio, then raises FFmpegError."""
+        video_dir = tmp_path / "video_dir"
+        video_dir.mkdir()
+        output_path = tmp_path / "audio.mp3"
+
+        with pytest.raises(FFmpegError, match="Video path is not a file"):
+            extract_audio(video_dir, output_path)
+
+    @pytest.mark.unit
+    def test_extract_audio_ffmpeg_error_with_stderr(self, tmp_path, mock_ffmpeg):
+        """Given ffmpeg fails with stderr, when extracting, then raises FFmpegError."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "audio.mp3"
+
+        error = Exception("ffmpeg error")
+        error.stderr = b"Codec not found"
+        mock_output = mock_ffmpeg.input.return_value.output.return_value
+        mock_chain = mock_output.overwrite_output.return_value
+        mock_chain.run.side_effect = error
+
+        with pytest.raises(
+            FFmpegError, match=r"Failed to extract audio.*Codec not found"
+        ):
+            extract_audio(video_path, output_path)
+
+    @pytest.mark.unit
+    def test_extract_audio_ffmpeg_error_without_stderr(self, tmp_path, mock_ffmpeg):
+        """Given ffmpeg fails without stderr, when extracting, then raises FFmpegError."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "audio.mp3"
+
+        error = Exception("Generic error")
+        mock_output = mock_ffmpeg.input.return_value.output.return_value
+        mock_chain = mock_output.overwrite_output.return_value
+        mock_chain.run.side_effect = error
+
+        with pytest.raises(
+            FFmpegError, match=r"Failed to extract audio.*Generic error"
+        ):
+            extract_audio(video_path, output_path)

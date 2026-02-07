@@ -76,3 +76,49 @@ def burn_subtitles(
         raise FFmpegError(f"Failed to burn subtitles: {error_message}") from e
 
     return output_path
+
+
+def extract_audio(
+    video_path: Path,
+    output_path: Path,
+    *,
+    bitrate: str = "64k",
+) -> Path:
+    """Extract audio from video as compressed MP3.
+
+    Args:
+        video_path: Input video file
+        output_path: Output audio file (.mp3)
+        bitrate: Audio bitrate (default 64k, sufficient for speech recognition)
+
+    Returns:
+        Path to output audio file
+
+    Raises:
+        FFmpegError: If video file does not exist or ffmpeg fails
+    """
+    if not video_path.exists():
+        raise FFmpegError(f"Video file does not exist: {video_path}")
+    if not video_path.is_file():
+        raise FFmpegError(f"Video path is not a file: {video_path}")
+
+    try:
+        (
+            ffmpeg.input(str(video_path))
+            .output(
+                str(output_path), acodec="libmp3lame", audio_bitrate=bitrate, vn=None
+            )
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except Exception as e:
+        if hasattr(e, "stderr") and e.stderr:
+            stderr = e.stderr
+            error_message = (
+                stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+            )
+        else:
+            error_message = str(e)
+        raise FFmpegError(f"Failed to extract audio: {error_message}") from e
+
+    return output_path
