@@ -3,6 +3,8 @@ import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { UrlInput } from './components/UrlInput';
 import { ProgressTracker } from './components/ProgressTracker';
 import { DownloadLinks } from './components/DownloadLinks';
+import { VideoPreview } from './components/VideoPreview';
+import { SubtitleEditor } from './components/SubtitleEditor';
 import { useJob } from './hooks/useJob';
 
 function App() {
@@ -59,6 +61,20 @@ function App() {
             >
               {t('form.submit')}
             </button>
+          </div>
+        )}
+
+        {/* Video Preview */}
+        {state.phase === 'completed' && state.jobId && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <VideoPreview jobId={state.jobId} />
+          </div>
+        )}
+
+        {/* Subtitle Editor */}
+        {state.phase === 'completed' && state.jobId && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <SubtitleEditor jobId={state.jobId} />
           </div>
         )}
 

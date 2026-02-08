@@ -8,7 +8,11 @@
     "source_lang": "Source Language",
     "target_lang": "Target Language",
     "submit": "Generate",
-    "submitting": "Submitting..."
+    "submitting": "Submitting...",
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "timePlaceholder": "00:00:00",
+    "timeFormatHint": "Format: HH:MM:SS (optional)"
   },
   "lang": {
     "en": "English",
@@ -32,6 +36,10 @@
     "ass": "Download ASS Subtitle",
     "video": "Download Burned Video"
   },
+  "preview": {
+    "title": "Video Preview",
+    "unsupported": "Your browser does not support video playback"
+  },
   "error": {
     "invalid_url": "Please enter a valid YouTube URL",
     "job_not_found": "Job not found",
@@ -40,9 +48,20 @@
     "translation_failed": "Translation failed",
     "pipeline_failed": "Processing error occurred",
     "network_error": "Network connection error",
-    "unknown_error": "An unknown error occurred"
+    "unknown_error": "An unknown error occurred",
+    "invalidTimeFormat": "Invalid time format",
+    "invalidTimeRange": "End time must be greater than start time"
   },
   "language_switcher": {
     "label": "Language"
+  },
+  "editor": {
+    "title": "SRT Review",
+    "loading": "Loading subtitles...",
+    "loadError": "Failed to load subtitles",
+    "empty": "No subtitle entries found",
+    "reset": "Reset",
+    "download": "Download Edited SRT",
+    "unsavedHint": "You have unsaved edits. Click download to save."
   }
 }

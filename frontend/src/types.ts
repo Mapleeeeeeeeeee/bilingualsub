@@ -4,6 +4,8 @@ export interface JobCreateRequest {
   youtube_url: string;
   source_lang?: string;
   target_lang?: string;
+  start_time?: number; // seconds
+  end_time?: number; // seconds
 }
 
 export interface JobCreateResponse {
@@ -36,4 +38,12 @@ export interface SSEHandlers {
   onProgress: (data: SSEProgressData) => void;
   onComplete: (data: SSEProgressData) => void;
   onError: (data: { code: string; message: string; detail?: string }) => void;
+}
+
+export interface SrtEntry {
+  index: number;
+  startTime: string; // "HH:MM:SS,mmm"
+  endTime: string;
+  translated: string; // first line: editable
+  original: string; // second line: read-only
 }

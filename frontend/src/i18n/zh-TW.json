@@ -8,7 +8,11 @@
     "source_lang": "原始語言",
     "target_lang": "翻譯語言",
     "submit": "開始生成",
-    "submitting": "提交中..."
+    "submitting": "提交中...",
+    "startTime": "開始時間",
+    "endTime": "結束時間",
+    "timePlaceholder": "00:00:00",
+    "timeFormatHint": "格式：HH:MM:SS（選填）"
   },
   "lang": {
     "en": "英文",
@@ -32,6 +36,10 @@
     "ass": "下載 ASS 字幕",
     "video": "下載燒錄影片"
   },
+  "preview": {
+    "title": "影片預覽",
+    "unsupported": "您的瀏覽器不支援影片播放"
+  },
   "error": {
     "invalid_url": "請輸入有效的 YouTube 網址",
     "job_not_found": "找不到此任務",
@@ -40,9 +48,20 @@
     "translation_failed": "翻譯失敗",
     "pipeline_failed": "處理過程發生錯誤",
     "network_error": "網路連線錯誤",
-    "unknown_error": "發生未知錯誤"
+    "unknown_error": "發生未知錯誤",
+    "invalidTimeFormat": "時間格式不正確",
+    "invalidTimeRange": "結束時間必須大於開始時間"
   },
   "language_switcher": {
     "label": "語言"
+  },
+  "editor": {
+    "title": "SRT 校閱",
+    "loading": "載入字幕中...",
+    "loadError": "載入字幕失敗",
+    "empty": "沒有找到字幕項目",
+    "reset": "重置",
+    "download": "下載已編輯 SRT",
+    "unsavedHint": "您有未儲存的編輯，點擊下載以儲存。"
   }
 }

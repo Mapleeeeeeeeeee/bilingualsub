@@ -60,6 +60,15 @@ class ApiClient {
     return es;
   }
 
+  async fetchSrtContent(jobId: string): Promise<string> {
+    const url = this.getDownloadUrl(jobId, FileType.SRT);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.text();
+  }
+
   getDownloadUrl(jobId: string, fileType: FileType): string {
     return `${this.baseUrl}/api/jobs/${jobId}/download/${fileType}`;
   }
