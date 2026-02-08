@@ -39,6 +39,70 @@ class TestJobCreateRequest:
         with pytest.raises(ValidationError):
             JobCreateRequest(youtube_url="not-a-url")
 
+    def test_default_time_range_is_none(self) -> None:
+        req = JobCreateRequest(youtube_url="https://www.youtube.com/watch?v=test123")
+        assert req.start_time is None
+        assert req.end_time is None
+
+    def test_valid_time_range(self) -> None:
+        req = JobCreateRequest(
+            youtube_url="https://www.youtube.com/watch?v=test123",
+            start_time=10.0,
+            end_time=30.0,
+        )
+        assert req.start_time == 10.0
+        assert req.end_time == 30.0
+
+    def test_start_time_only(self) -> None:
+        req = JobCreateRequest(
+            youtube_url="https://www.youtube.com/watch?v=test123",
+            start_time=10.0,
+        )
+        assert req.start_time == 10.0
+        assert req.end_time is None
+
+    def test_end_time_only(self) -> None:
+        req = JobCreateRequest(
+            youtube_url="https://www.youtube.com/watch?v=test123",
+            end_time=30.0,
+        )
+        assert req.start_time is None
+        assert req.end_time == 30.0
+
+    def test_negative_start_time_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="start_time must be non-negative"):
+            JobCreateRequest(
+                youtube_url="https://www.youtube.com/watch?v=test123",
+                start_time=-1.0,
+            )
+
+    def test_negative_end_time_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="end_time must be non-negative"):
+            JobCreateRequest(
+                youtube_url="https://www.youtube.com/watch?v=test123",
+                end_time=-5.0,
+            )
+
+    def test_start_time_greater_than_end_time_rejected(self) -> None:
+        with pytest.raises(
+            ValidationError, match="start_time must be less than end_time"
+        ):
+            JobCreateRequest(
+                youtube_url="https://www.youtube.com/watch?v=test123",
+                start_time=30.0,
+                end_time=10.0,
+            )
+
+    def test_start_time_equal_to_end_time_rejected(self) -> None:
+        with pytest.raises(
+            ValidationError, match="start_time must be less than end_time"
+        ):
+            JobCreateRequest(
+                youtube_url="https://www.youtube.com/watch?v=test123",
+                start_time=10.0,
+                end_time=10.0,
+            )
+
 
 @pytest.mark.unit
 class TestJobCreateResponse:

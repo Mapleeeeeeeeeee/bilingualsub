@@ -13,6 +13,17 @@ from bilingualsub.core.downloader import DownloadError, VideoMetadata
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 
 
+def _make_job_with_time_range() -> Job:
+    return Job(
+        id="test456",
+        youtube_url="https://youtube.com/watch?v=test",
+        source_lang="en",
+        target_lang="zh-TW",
+        start_time=10.0,
+        end_time=30.0,
+    )
+
+
 def _make_job() -> Job:
     return Job(
         id="test123",
@@ -153,3 +164,83 @@ class TestRunPipeline:
         transcribe_call_args = mock_transcribe.call_args
         audio_arg = transcribe_call_args[0][0]
         assert audio_arg.name == "audio.mp3"
+
+    @patch("bilingualsub.api.pipeline.burn_subtitles")
+    @patch("bilingualsub.api.pipeline.serialize_bilingual_ass")
+    @patch("bilingualsub.api.pipeline.serialize_srt")
+    @patch("bilingualsub.api.pipeline.merge_subtitles")
+    @patch("bilingualsub.api.pipeline.translate_subtitle")
+    @patch("bilingualsub.api.pipeline.transcribe_audio")
+    @patch("bilingualsub.api.pipeline.extract_audio")
+    @patch("bilingualsub.api.pipeline.trim_video")
+    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    async def test_pipeline_with_time_range_calls_trim(
+        self,
+        mock_download,
+        mock_trim,
+        mock_extract_audio,
+        mock_transcribe,
+        mock_translate,
+        mock_merge,
+        mock_serialize_srt,
+        mock_serialize_ass,
+        mock_burn,
+    ) -> None:
+        """Given job with time range, pipeline should call trim_video."""
+        sub = _make_subtitle()
+        mock_download.return_value = _make_metadata()
+        mock_trim.return_value = Path("/tmp/trimmed.mp4")
+        mock_transcribe.return_value = sub
+        mock_translate.return_value = sub
+        mock_merge.return_value = sub.entries
+        mock_serialize_srt.return_value = "1\n00:00:00,000 --> 00:00:04,000\nLine 1"
+        mock_serialize_ass.return_value = "[Script Info]\n..."
+
+        job = _make_job_with_time_range()
+        await run_pipeline(job)
+
+        # Verify trim was called
+        mock_trim.assert_called_once()
+        call_args = mock_trim.call_args[0]
+        assert call_args[0].name == "video.mp4"
+        assert call_args[1].name == "video_trimmed.mp4"
+        assert call_args[2] == 10.0
+        assert call_args[3] == 30.0
+
+        assert job.status == JobStatus.COMPLETED
+
+    @patch("bilingualsub.api.pipeline.burn_subtitles")
+    @patch("bilingualsub.api.pipeline.serialize_bilingual_ass")
+    @patch("bilingualsub.api.pipeline.serialize_srt")
+    @patch("bilingualsub.api.pipeline.merge_subtitles")
+    @patch("bilingualsub.api.pipeline.translate_subtitle")
+    @patch("bilingualsub.api.pipeline.transcribe_audio")
+    @patch("bilingualsub.api.pipeline.extract_audio")
+    @patch("bilingualsub.api.pipeline.trim_video")
+    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    async def test_pipeline_without_time_range_skips_trim(
+        self,
+        mock_download,
+        mock_trim,
+        mock_extract_audio,
+        mock_transcribe,
+        mock_translate,
+        mock_merge,
+        mock_serialize_srt,
+        mock_serialize_ass,
+        mock_burn,
+    ) -> None:
+        """Given job without time range, pipeline should NOT call trim_video."""
+        sub = _make_subtitle()
+        mock_download.return_value = _make_metadata()
+        mock_transcribe.return_value = sub
+        mock_translate.return_value = sub
+        mock_merge.return_value = sub.entries
+        mock_serialize_srt.return_value = "1\n00:00:00,000 --> 00:00:04,000\nLine 1"
+        mock_serialize_ass.return_value = "[Script Info]\n..."
+
+        job = _make_job()
+        await run_pipeline(job)
+
+        mock_trim.assert_not_called()
+        assert job.status == JobStatus.COMPLETED

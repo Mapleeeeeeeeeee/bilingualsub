@@ -4,7 +4,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from bilingualsub.utils.ffmpeg import FFmpegError, burn_subtitles, extract_audio
+from bilingualsub.utils.ffmpeg import (
+    FFmpegError,
+    burn_subtitles,
+    extract_audio,
+    trim_video,
+)
 
 
 class TestBurnSubtitles:
@@ -398,3 +403,85 @@ class TestExtractAudio:
             FFmpegError, match=r"Failed to extract audio.*Generic error"
         ):
             extract_audio(video_path, output_path)
+
+
+class TestTrimVideo:
+    """Test cases for trim_video function."""
+
+    @pytest.fixture
+    def mock_ffmpeg(self):
+        """Mock ffmpeg module."""
+        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock:
+            mock_stream = MagicMock()
+            mock.input.return_value = mock_stream
+            mock_stream.output.return_value = mock_stream
+            mock_stream.overwrite_output.return_value = mock_stream
+            mock_stream.run.return_value = None
+            yield mock
+
+    @pytest.mark.unit
+    def test_trim_video_success(self, tmp_path, mock_ffmpeg):
+        """Given valid video, when trimming, then calls ffmpeg correctly."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "trimmed.mp4"
+
+        result = trim_video(video_path, output_path, 10.0, 30.0)
+
+        mock_ffmpeg.input.assert_called_once_with(str(video_path), ss=10.0, to=30.0)
+        call_args = mock_ffmpeg.input.return_value.output.call_args
+        assert call_args[0] == (str(output_path),)
+        assert call_args[1]["c"] == "copy"
+        assert result == output_path
+
+    @pytest.mark.unit
+    def test_trim_video_not_found(self, tmp_path):
+        """Given non-existent video, when trimming, then raises FFmpegError."""
+        video_path = tmp_path / "nonexistent.mp4"
+        output_path = tmp_path / "trimmed.mp4"
+
+        with pytest.raises(FFmpegError, match="Video file does not exist"):
+            trim_video(video_path, output_path, 0.0, 10.0)
+
+    @pytest.mark.unit
+    def test_trim_video_is_directory(self, tmp_path):
+        """Given directory as video, when trimming, then raises FFmpegError."""
+        video_dir = tmp_path / "video_dir"
+        video_dir.mkdir()
+        output_path = tmp_path / "trimmed.mp4"
+
+        with pytest.raises(FFmpegError, match="Video path is not a file"):
+            trim_video(video_dir, output_path, 0.0, 10.0)
+
+    @pytest.mark.unit
+    def test_trim_video_ffmpeg_error_with_stderr(self, tmp_path, mock_ffmpeg):
+        """Given ffmpeg fails with stderr, when trimming, then raises FFmpegError."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "trimmed.mp4"
+
+        error = Exception("ffmpeg error")
+        error.stderr = b"Invalid time range"
+        mock_output = mock_ffmpeg.input.return_value.output.return_value
+        mock_chain = mock_output.overwrite_output.return_value
+        mock_chain.run.side_effect = error
+
+        with pytest.raises(
+            FFmpegError, match=r"Failed to trim video.*Invalid time range"
+        ):
+            trim_video(video_path, output_path, 0.0, 10.0)
+
+    @pytest.mark.unit
+    def test_trim_video_ffmpeg_error_without_stderr(self, tmp_path, mock_ffmpeg):
+        """Given ffmpeg fails without stderr, when trimming, then raises FFmpegError."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video content")
+        output_path = tmp_path / "trimmed.mp4"
+
+        error = Exception("Generic error")
+        mock_output = mock_ffmpeg.input.return_value.output.return_value
+        mock_chain = mock_output.overwrite_output.return_value
+        mock_chain.run.side_effect = error
+
+        with pytest.raises(FFmpegError, match=r"Failed to trim video.*Generic error"):
+            trim_video(video_path, output_path, 0.0, 10.0)
