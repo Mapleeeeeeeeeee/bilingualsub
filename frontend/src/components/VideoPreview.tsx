@@ -10,15 +10,12 @@ export function VideoPreview({ jobId }: VideoPreviewProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-lg font-semibold text-gray-800">{t('preview.title')}</h3>
-      <video
-        controls
-        className="w-full rounded-lg"
-        src={apiClient.getDownloadUrl(jobId, FileType.VIDEO)}
-      >
-        {t('preview.unsupported')}
-      </video>
-    </div>
+    <video
+      controls
+      className="w-full h-full object-cover"
+      src={apiClient.getDownloadUrl(jobId, FileType.VIDEO)}
+    >
+      {t('preview.unsupported')}
+    </video>
   );
 }

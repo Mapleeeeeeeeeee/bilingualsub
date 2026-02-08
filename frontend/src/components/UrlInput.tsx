@@ -72,93 +72,90 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
+    <form onSubmit={handleSubmit} className="space-y-16">
+      <div className="relative group">
         <input
           type="url"
           value={url}
           onChange={e => setUrl(e.target.value)}
-          placeholder={t('form.url_placeholder')}
+          placeholder={t('form.paste_placeholder')}
           disabled={disabled}
-          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-6 bg-transparent border-b-2 border-gray-100 text-3xl md:text-5xl font-serif text-black placeholder-gray-200 focus:outline-none focus:border-black transition-colors text-center"
         />
-        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className="absolute -bottom-8 left-0 w-full text-center text-red-500 text-sm font-medium">
+            {error}
+          </p>
+        )}
       </div>
 
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('form.source_lang')}
+      <div className="flex flex-col md:flex-row items-center justify-center gap-12 text-gray-400">
+        <div className="flex items-center gap-4">
+          <label className="text-xs uppercase tracking-widest font-bold">
+            {t('form.label_translate')}
           </label>
-          <select
-            value={sourceLang}
-            onChange={e => setSourceLang(e.target.value)}
-            disabled={disabled}
-            className="w-full px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
-          >
-            {LANGUAGES.map(lang => (
-              <option key={lang.value} value={lang.value}>
-                {t(lang.labelKey)}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 text-black font-serif text-xl border-b border-gray-200 pb-1">
+            <select
+              value={sourceLang}
+              onChange={e => setSourceLang(e.target.value)}
+              disabled={disabled}
+              className="bg-transparent focus:outline-none cursor-pointer appearance-none hover:opacity-60"
+            >
+              {LANGUAGES.map(lang => (
+                <option key={lang.value} value={lang.value}>
+                  {t(lang.labelKey)}
+                </option>
+              ))}
+            </select>
+            <span className="text-gray-300">→</span>
+            <select
+              value={targetLang}
+              onChange={e => setTargetLang(e.target.value)}
+              disabled={disabled}
+              className="bg-transparent focus:outline-none cursor-pointer appearance-none hover:opacity-60"
+            >
+              {LANGUAGES.map(lang => (
+                <option key={lang.value} value={lang.value}>
+                  {t(lang.labelKey)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('form.target_lang')}
+
+        <div className="flex items-center gap-4">
+          <label className="text-xs uppercase tracking-widest font-bold">
+            {t('form.label_range')}
           </label>
-          <select
-            value={targetLang}
-            onChange={e => setTargetLang(e.target.value)}
-            disabled={disabled}
-            className="w-full px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
-          >
-            {LANGUAGES.map(lang => (
-              <option key={lang.value} value={lang.value}>
-                {t(lang.labelKey)}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 text-black font-mono text-lg border-b border-gray-200 pb-1">
+            <input
+              type="text"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              placeholder="00:00:00"
+              className="w-24 bg-transparent text-center focus:outline-none placeholder-gray-200"
+            />
+            <span className="text-gray-300">-</span>
+            <input
+              type="text"
+              value={endTime}
+              onChange={e => setEndTime(e.target.value)}
+              placeholder="00:00:00"
+              className="w-24 bg-transparent text-center focus:outline-none placeholder-gray-200"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('form.startTime')}
-          </label>
-          <input
-            type="text"
-            value={startTime}
-            onChange={e => setStartTime(e.target.value)}
-            placeholder={t('form.timePlaceholder')}
-            disabled={disabled}
-            className="w-full px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('form.endTime')}
-          </label>
-          <input
-            type="text"
-            value={endTime}
-            onChange={e => setEndTime(e.target.value)}
-            placeholder={t('form.timePlaceholder')}
-            disabled={disabled}
-            className="w-full px-3 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
-          />
-        </div>
+      <div className="flex justify-center">
+        <button
+          type="submit"
+          disabled={disabled}
+          className="px-12 py-5 bg-black text-white text-lg font-medium rounded-full hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-gray-200"
+        >
+          {disabled ? t('form.submitting') : t('form.start_processing')}
+        </button>
       </div>
-      <p className="text-xs text-gray-500">{t('form.timeFormatHint')}</p>
-
-      <button
-        type="submit"
-        disabled={disabled}
-        className="w-full py-3 px-6 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {disabled ? t('form.submitting') : t('form.submit')}
-      </button>
     </form>
   );
 }

@@ -16,20 +16,32 @@ export function DownloadLinks({ jobId }: DownloadLinksProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-lg font-semibold text-gray-800">{t('download.title')}</h3>
-      <div className="flex gap-3">
-        {FILE_OPTIONS.map(({ type, labelKey }) => (
-          <a
-            key={type}
-            href={apiClient.getDownloadUrl(jobId, type)}
-            download
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-          >
+    <div className="space-y-2">
+      {FILE_OPTIONS.map(({ type, labelKey }) => (
+        <a
+          key={type}
+          href={apiClient.getDownloadUrl(jobId, type)}
+          download
+          className="flex items-center justify-between py-4 border-b border-gray-100 hover:pl-4 transition-all group"
+        >
+          <span className="text-lg font-light text-gray-900 group-hover:text-black">
             {t(labelKey)}
-          </a>
-        ))}
-      </div>
+          </span>
+          <svg
+            className="w-5 h-5 text-gray-300 group-hover:text-black transition-colors"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1}
+              d="M17 8l4 4m0 0l-4 4m4-4H3"
+            />
+          </svg>
+        </a>
+      ))}
     </div>
   );
 }

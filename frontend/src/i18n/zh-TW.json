@@ -1,13 +1,23 @@
 {
   "app": {
     "title": "BilingualSub",
-    "subtitle": "YouTube 雙語字幕自動生成工具"
+    "subtitle": "YouTube 雙語字幕自動生成工具",
+    "processing_title": "影片處理中",
+    "processing_desc": "請稍候，我們正在進行語音辨識與翻譯。",
+    "error_title": "發生錯誤",
+    "start_over": "重新開始",
+    "downloads_title": "下載檔案",
+    "downloads_desc": "您的影片已處理完成。您可以下載獨立字幕檔或已燒錄字幕的影片。"
   },
   "form": {
     "url_placeholder": "貼上 YouTube 影片網址",
+    "paste_placeholder": "貼上 YouTube 網址...",
     "source_lang": "原始語言",
     "target_lang": "翻譯語言",
+    "label_translate": "翻譯語言",
+    "label_range": "時間範圍",
     "submit": "開始生成",
+    "start_processing": "開始處理",
     "submitting": "提交中...",
     "startTime": "開始時間",
     "endTime": "結束時間",
@@ -62,6 +72,7 @@
     "empty": "沒有找到字幕項目",
     "reset": "重置",
     "download": "下載已編輯 SRT",
-    "unsavedHint": "您有未儲存的編輯，點擊下載以儲存。"
+    "unsavedHint": "您有未儲存的編輯，點擊下載以儲存。",
+    "segments_label": "句段"
   }
 }

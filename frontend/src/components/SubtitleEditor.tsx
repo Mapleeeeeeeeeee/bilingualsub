@@ -71,58 +71,75 @@ export function SubtitleEditor({ jobId }: SubtitleEditorProps) {
   }, [entries]);
 
   if (loading) {
-    return <p className="text-sm text-gray-500">{t('editor.loading')}</p>;
+    return (
+      <p className="text-center text-gray-400 font-serif italic py-12">{t('editor.loading')}</p>
+    );
   }
 
   if (error) {
-    return <p className="text-sm text-red-500">{error}</p>;
+    return <p className="text-center text-red-500 py-12">{error}</p>;
   }
 
   if (entries.length === 0) {
-    return <p className="text-sm text-gray-500">{t('editor.empty')}</p>;
+    return <p className="text-center text-gray-400 py-12">{t('editor.empty')}</p>;
   }
 
   return (
-    <div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('editor.title')}</h3>
+    <div className="space-y-12">
+      <div className="flex items-center justify-between border-b border-black pb-4">
+        <h3 className="text-2xl font-serif">{t('editor.title')}</h3>
+        <div className="flex gap-8">
+          <button
+            onClick={handleReset}
+            disabled={!hasEdits}
+            className="text-sm uppercase tracking-widest hover:text-red-600 disabled:opacity-30 transition-colors"
+          >
+            {t('editor.reset')}
+          </button>
+          <button
+            onClick={handleDownload}
+            className="text-sm uppercase tracking-widest hover:text-green-600 transition-colors"
+          >
+            {t('editor.download')}
+          </button>
+        </div>
+      </div>
 
-      <div className="max-h-96 overflow-y-auto space-y-3 mb-4">
+      <div className="space-y-8">
         {entries.map((entry, i) => (
-          <div key={entry.index} className="border border-gray-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-2 text-xs text-gray-400">
-              <span>#{entry.index}</span>
-              <span>
-                {entry.startTime} → {entry.endTime}
-              </span>
+          <div key={entry.index} className="grid grid-cols-1 md:grid-cols-12 gap-8 group">
+            {/* Metadata Column */}
+            <div className="md:col-span-3 pt-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-bold text-gray-300 group-hover:text-black transition-colors">
+                  #{entry.index}
+                </span>
+                <span className="font-mono text-xs text-gray-400">{entry.startTime}</span>
+                <span className="font-mono text-xs text-gray-400">{entry.endTime}</span>
+              </div>
             </div>
-            <textarea
-              value={entry.translated}
-              onChange={e => handleTranslatedChange(i, e.target.value)}
-              rows={1}
-              className="w-full px-2 py-1 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            {entry.original && <p className="mt-1 text-xs text-gray-400">{entry.original}</p>}
+
+            {/* Content Column */}
+            <div className="md:col-span-9 space-y-4">
+              <textarea
+                value={entry.translated}
+                onChange={e => handleTranslatedChange(i, e.target.value)}
+                rows={Math.max(2, Math.ceil(entry.translated.length / 60))}
+                className="w-full bg-transparent text-xl md:text-2xl font-serif text-black placeholder-gray-300 focus:outline-none focus:bg-gray-50 p-2 -ml-2 rounded transition-colors resize-none leading-relaxed"
+              />
+              {entry.original && (
+                <p className="text-sm text-gray-400 font-sans leading-relaxed">{entry.original}</p>
+              )}
+            </div>
           </div>
         ))}
       </div>
 
-      {hasEdits && <p className="text-xs text-amber-600 mb-3">{t('editor.unsavedHint')}</p>}
-
-      <div className="flex gap-3">
-        <button
-          onClick={handleReset}
-          disabled={!hasEdits}
-          className="px-4 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {t('editor.reset')}
-        </button>
-        <button
-          onClick={handleDownload}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          {t('editor.download')}
-        </button>
-      </div>
+      {hasEdits && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-3 rounded-full shadow-2xl animate-bounce">
+          <span className="text-sm font-medium">{t('editor.unsavedHint')}</span>
+        </div>
+      )}
     </div>
   );
 }

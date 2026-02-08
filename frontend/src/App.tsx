@@ -11,33 +11,39 @@ function App() {
   const { t } = useTranslation();
   const { state, submitJob, reset } = useJob();
 
+  const isIdle = state.phase === 'idle';
   const isProcessing = state.phase === 'submitting' || state.phase === 'processing';
+  const isCompleted = state.phase === 'completed' && state.jobId;
+  const isFailed = state.phase === 'failed';
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="border-b border-gray-200 bg-white">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t('app.title')}</h1>
-            <p className="text-sm text-gray-500">{t('app.subtitle')}</p>
-          </div>
-          <LanguageSwitcher />
-        </div>
+    <div className="min-h-screen bg-white text-black selection:bg-black selection:text-white font-sans flex flex-col">
+      {/* Minimal Header */}
+      <header className="fixed top-0 right-0 p-8 z-50">
+        <LanguageSwitcher />
       </header>
 
-      {/* Main content */}
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-8">
-        {/* URL Input */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <UrlInput onSubmit={submitJob} disabled={isProcessing} />
-        </div>
+      <main className="flex-1 w-full max-w-5xl mx-auto px-6 py-12 flex flex-col justify-center min-h-screen transition-all duration-700 ease-in-out">
+        {/* IDLE STATE: Hero Input */}
+        {isIdle && (
+          <div className="max-w-2xl mx-auto w-full space-y-12 animate-fade-in-up">
+            <div className="text-center space-y-4">
+              <h1 className="text-6xl font-serif font-light tracking-tight text-black">
+                {t('app.title')}
+              </h1>
+              <p className="text-xl text-gray-400 font-light">{t('app.subtitle')}</p>
+            </div>
+            <UrlInput onSubmit={submitJob} disabled={false} />
+          </div>
+        )}
 
-        {/* Progress */}
-        {(state.phase === 'processing' ||
-          state.phase === 'completed' ||
-          state.phase === 'failed') && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        {/* PROCESSING STATE: Minimal Progress */}
+        {isProcessing && (
+          <div className="max-w-xl mx-auto w-full space-y-12 text-center animate-fade-in-up">
+            <div className="space-y-4">
+              <h2 className="text-3xl font-serif font-light">{t('app.processing_title')}</h2>
+              <p className="text-gray-400">{t('app.processing_desc')}</p>
+            </div>
             <ProgressTracker
               status={state.status}
               progress={state.progress}
@@ -46,48 +52,74 @@ function App() {
           </div>
         )}
 
-        {/* Error */}
-        {state.phase === 'failed' && state.error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-            <p className="text-red-800 font-medium">
+        {/* FAILED STATE */}
+        {isFailed && state.error && (
+          <div className="max-w-xl mx-auto w-full text-center space-y-8 animate-fade-in-up">
+            <h2 className="text-4xl font-serif text-red-600">{t('app.error_title')}</h2>
+            <p className="text-gray-500 text-lg">
               {t(`error.${state.error.code}`, { defaultValue: state.error.message })}
             </p>
             {state.error.detail && (
-              <p className="mt-1 text-sm text-red-600">{state.error.detail}</p>
+              <p className="text-gray-400 text-sm font-mono">{state.error.detail}</p>
             )}
             <button
               onClick={reset}
-              className="mt-3 px-4 py-2 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors"
+              className="px-8 py-3 bg-black text-white rounded-full hover:scale-105 transition-transform"
             >
               {t('form.submit')}
             </button>
           </div>
         )}
 
-        {/* Video Preview */}
-        {state.phase === 'completed' && state.jobId && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <VideoPreview jobId={state.jobId} />
-          </div>
-        )}
+        {/* COMPLETED STATE: Cinema Mode */}
+        {isCompleted && (
+          <div className="w-full space-y-16 animate-fade-in-up py-12">
+            {/* Top Bar with Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={reset}
+                className="flex items-center gap-2 text-gray-400 hover:text-black transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                <span className="text-sm font-medium uppercase tracking-widest">
+                  {t('app.start_over')}
+                </span>
+              </button>
+              <h1 className="text-2xl font-serif">{t('app.title')}</h1>
+              <div className="w-24"></div> {/* Spacer for balance */}
+            </div>
 
-        {/* Subtitle Editor */}
-        {state.phase === 'completed' && state.jobId && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <SubtitleEditor jobId={state.jobId} />
-          </div>
-        )}
+            {/* Video & Downloads Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
+              <div className="lg:col-span-2">
+                <div className="rounded-3xl overflow-hidden shadow-2xl shadow-gray-200 bg-black">
+                  <VideoPreview jobId={state.jobId!} />
+                </div>
+              </div>
+              <div className="lg:col-span-1 space-y-8">
+                <div>
+                  <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
+                  <DownloadLinks jobId={state.jobId!} />
+                </div>
+                <div className="p-6 bg-gray-50 rounded-3xl">
+                  <p className="text-sm text-gray-500 leading-relaxed">{t('app.downloads_desc')}</p>
+                </div>
+              </div>
+            </div>
 
-        {/* Download links */}
-        {state.phase === 'completed' && state.jobId && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <DownloadLinks jobId={state.jobId} />
-            <button
-              onClick={reset}
-              className="mt-4 w-full py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              {t('form.submit')}
-            </button>
+            {/* Editor Section */}
+            <div className="border-t border-gray-100 pt-16">
+              <div className="max-w-3xl mx-auto">
+                <SubtitleEditor jobId={state.jobId!} />
+              </div>
+            </div>
           </div>
         )}
       </main>

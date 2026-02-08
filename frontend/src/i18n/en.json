@@ -1,13 +1,23 @@
 {
   "app": {
     "title": "BilingualSub",
-    "subtitle": "YouTube Bilingual Subtitle Generator"
+    "subtitle": "YouTube Bilingual Subtitle Generator",
+    "processing_title": "Processing Video",
+    "processing_desc": "Please wait while we transcribe and translate.",
+    "error_title": "Something went wrong",
+    "start_over": "Start Over",
+    "downloads_title": "Downloads",
+    "downloads_desc": "Your video has been successfully processed. You can download the subtitles separately or the burned-in video."
   },
   "form": {
     "url_placeholder": "Paste YouTube video URL",
+    "paste_placeholder": "Paste YouTube URL...",
     "source_lang": "Source Language",
     "target_lang": "Target Language",
+    "label_translate": "Translate",
+    "label_range": "Range",
     "submit": "Generate",
+    "start_processing": "Start Processing",
     "submitting": "Submitting...",
     "startTime": "Start Time",
     "endTime": "End Time",
@@ -62,6 +72,7 @@
     "empty": "No subtitle entries found",
     "reset": "Reset",
     "download": "Download Edited SRT",
-    "unsavedHint": "You have unsaved edits. Click download to save."
+    "unsavedHint": "You have unsaved edits. Click download to save.",
+    "segments_label": "SEGMENTS"
   }
 }
