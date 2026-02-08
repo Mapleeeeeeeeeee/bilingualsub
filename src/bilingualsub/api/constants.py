@@ -1,0 +1,38 @@
+"""Constants and enums for the API layer."""
+
+from enum import StrEnum
+
+
+class JobStatus(StrEnum):
+    """Status of a subtitle generation job."""
+
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    TRANSCRIBING = "transcribing"
+    TRANSLATING = "translating"
+    MERGING = "merging"
+    BURNING = "burning"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class FileType(StrEnum):
+    """Output file types produced by the pipeline."""
+
+    SRT = "srt"
+    ASS = "ass"
+    VIDEO = "video"
+
+
+class SSEEvent(StrEnum):
+    """Server-Sent Events event types."""
+
+    PROGRESS = "progress"
+    COMPLETE = "complete"
+    ERROR = "error"
+    PING = "ping"
+
+
+JOB_TTL_SECONDS = 1800
+CLEANUP_INTERVAL_SECONDS = 300
+SSE_KEEPALIVE_SECONDS = 30

@@ -14,6 +14,8 @@ from bilingualsub.api.constants import FileType, JobStatus, SSEEvent
 from bilingualsub.api.errors import PipelineError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from bilingualsub.api.jobs import Job
 from bilingualsub.core import (
     DownloadError,
@@ -99,6 +101,22 @@ def _to_pipeline_error(exc: Exception) -> PipelineError:
     )
 
 
+def _make_translate_progress_cb(job: Job) -> Callable[[int, int], None]:
+    """Create a progress callback for the translation step."""
+
+    def _on_progress(completed: int, total: int) -> None:
+        pct = 50.0 + (completed / total) * 20.0 if total > 0 else 50.0
+        _send_progress(
+            job,
+            JobStatus.TRANSLATING,
+            pct,
+            "translate",
+            f"Translating subtitles ({completed}/{total})",
+        )
+
+    return _on_progress
+
+
 async def run_pipeline(job: Job) -> None:
     """Execute the full subtitle generation pipeline for a job.
 
@@ -155,11 +173,15 @@ async def run_pipeline(job: Job) -> None:
             job, JobStatus.TRANSLATING, 50.0, "translate", "Translating subtitles"
         )
         t0 = time.monotonic()
+
+        _on_translate_progress = _make_translate_progress_cb(job)
+
         translated_sub = await asyncio.to_thread(
             translate_subtitle,
             original_sub,
             source_lang=job.source_lang,
             target_lang=job.target_lang,
+            on_progress=_on_translate_progress,
         )
         log.info(
             "step_done",

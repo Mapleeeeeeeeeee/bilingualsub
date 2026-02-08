@@ -25,7 +25,7 @@ class TestSettings:
 
     def test_settings_loads_api_key_from_env(self, monkeypatch):
         """Should load GROQ_API_KEY from environment."""
-        monkeypatch.setenv("GROQ_API_KEY", "test-key-123")
+        monkeypatch.setenv("GROQ_API_KEY", "test-key-123")  # pragma: allowlist secret
 
         settings = get_settings()
 
@@ -41,10 +41,10 @@ class TestSettings:
 
     def test_get_settings_is_cached(self, monkeypatch):
         """Should return cached settings on subsequent calls."""
-        monkeypatch.setenv("GROQ_API_KEY", "original-key")
+        monkeypatch.setenv("GROQ_API_KEY", "original-key")  # pragma: allowlist secret
 
         settings1 = get_settings()
-        monkeypatch.setenv("GROQ_API_KEY", "new-key")
+        monkeypatch.setenv("GROQ_API_KEY", "new-key")  # pragma: allowlist secret
         settings2 = get_settings()
 
         # Same instance due to caching
@@ -53,11 +53,11 @@ class TestSettings:
 
     def test_cache_clear_reloads_settings(self, monkeypatch):
         """Should reload settings after cache clear."""
-        monkeypatch.setenv("GROQ_API_KEY", "original-key")
+        monkeypatch.setenv("GROQ_API_KEY", "original-key")  # pragma: allowlist secret
         settings1 = get_settings()
 
         get_settings.cache_clear()
-        monkeypatch.setenv("GROQ_API_KEY", "new-key")
+        monkeypatch.setenv("GROQ_API_KEY", "new-key")  # pragma: allowlist secret
         settings2 = get_settings()
 
         assert settings1.groq_api_key == "original-key"
@@ -85,7 +85,9 @@ class TestGetGroqApiKey:
 
     def test_returns_api_key_when_set(self, monkeypatch):
         """Should return API key when properly configured."""
-        monkeypatch.setenv("GROQ_API_KEY", "valid-api-key-xyz")
+        monkeypatch.setenv(
+            "GROQ_API_KEY", "valid-api-key-xyz"
+        )  # pragma: allowlist secret
 
         result = get_groq_api_key()
 

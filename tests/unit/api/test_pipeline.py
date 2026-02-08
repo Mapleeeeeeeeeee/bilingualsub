@@ -92,6 +92,11 @@ class TestRunPipeline:
         assert SSEEvent.ERROR not in event_types
         assert job.status == JobStatus.COMPLETED
 
+        # Verify translate_subtitle received on_progress callback
+        translate_call_kwargs = mock_translate.call_args.kwargs
+        assert "on_progress" in translate_call_kwargs
+        assert callable(translate_call_kwargs["on_progress"])
+
     @patch("bilingualsub.api.pipeline.download_youtube_video")
     async def test_download_error(self, mock_download) -> None:
         mock_download.side_effect = DownloadError("Network error")
