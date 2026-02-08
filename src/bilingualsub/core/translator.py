@@ -1,14 +1,13 @@
-"""LLM-based subtitle translation using Agno + Groq."""
+"""LLM-based subtitle translation using Agno + Ollama."""
 
 import logging
 import re
 from collections.abc import Callable
 
 from agno.agent import Agent
-from agno.models.groq import Groq
+from agno.models.ollama import Ollama
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
-from bilingualsub.utils.config import get_groq_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +77,8 @@ def _translate_batch(
     """
     numbered_lines = "\n".join(f"{i}. {entry.text}" for i, entry in enumerate(batch, 1))
     prompt = (
-        f"Translate the following subtitle lines from {source_lang} to {target_lang}.\n"
-        f"Return ONLY the numbered translations, one per line, "
-        f"matching the input numbering exactly.\n\n"
+        f"將以下編號字幕從{source_lang}翻譯成{target_lang}。\n"
+        f"只回傳編號翻譯，每行一條，編號與原文一致。\n\n"  # noqa: RUF001
         f"{numbered_lines}"
     )
 
@@ -115,8 +113,7 @@ def _translate_one_by_one(
     results = []
     for entry in batch:
         response = translator.run(
-            f"Translate this subtitle text from {source_lang} to {target_lang}: "
-            f"{entry.text}"
+            f"將這段字幕從{source_lang}翻譯成{target_lang}：{entry.text}"  # noqa: RUF001
         )
         translated_text = response.content.strip() if response.content else ""
         if not translated_text:
@@ -152,23 +149,14 @@ def translate_subtitle(
 
     Raises:
         TranslationError: If translation fails
-        ValueError: If GROQ_API_KEY is not set
     """
-    api_key = get_groq_api_key()
-
     translator = Agent(
-        model=Groq(
-            id="qwen/qwen3-32b",
-            api_key=api_key,
-            request_params={"reasoning_format": "hidden"},
-        ),
+        model=Ollama(id="TwinkleAI/gemma-3-4B-T1-it"),
         description=(
-            f"You are a professional subtitle translator. "
-            f"Translate {source_lang} to {target_lang} naturally and fluently. "
-            f"Keep the translation conversational and easy to understand. "
-            f"You will receive numbered subtitle lines. "
-            f"Return ONLY the numbered translations in the same format. "
-            f"Do not add explanations, notes, or extra text."
+            "你是專業的影片字幕翻譯員。"
+            "將英文字幕翻譯成道地的台灣繁體中文。"
+            "規則：意譯為主，忠於語意但用自然口語表達；簡短有力，適合字幕閱讀；"  # noqa: RUF001
+            "收到編號字幕，只回傳相同編號的翻譯結果；不要加任何解釋或額外文字。"  # noqa: RUF001
         ),
     )
 
