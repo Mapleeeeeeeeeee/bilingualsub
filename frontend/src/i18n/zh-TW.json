@@ -1,0 +1,48 @@
+{
+  "app": {
+    "title": "BilingualSub",
+    "subtitle": "YouTube 雙語字幕自動生成工具"
+  },
+  "form": {
+    "url_placeholder": "貼上 YouTube 影片網址",
+    "source_lang": "原始語言",
+    "target_lang": "翻譯語言",
+    "submit": "開始生成",
+    "submitting": "提交中..."
+  },
+  "lang": {
+    "en": "英文",
+    "zh-TW": "繁體中文",
+    "ja": "日文",
+    "ko": "韓文"
+  },
+  "progress": {
+    "pending": "等待中",
+    "downloading": "下載影片中...",
+    "transcribing": "語音辨識中...",
+    "translating": "翻譯字幕中...",
+    "merging": "合併字幕中...",
+    "burning": "燒錄字幕中...",
+    "completed": "完成！",
+    "failed": "處理失敗"
+  },
+  "download": {
+    "title": "下載結果",
+    "srt": "下載 SRT 字幕",
+    "ass": "下載 ASS 字幕",
+    "video": "下載燒錄影片"
+  },
+  "error": {
+    "invalid_url": "請輸入有效的 YouTube 網址",
+    "job_not_found": "找不到此任務",
+    "download_failed": "影片下載失敗",
+    "transcription_failed": "語音辨識失敗",
+    "translation_failed": "翻譯失敗",
+    "pipeline_failed": "處理過程發生錯誤",
+    "network_error": "網路連線錯誤",
+    "unknown_error": "發生未知錯誤"
+  },
+  "language_switcher": {
+    "label": "語言"
+  }
+}

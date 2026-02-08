@@ -18,6 +18,7 @@ repos:
         args: [--unsafe]
       - id: check-toml
       - id: check-json
+        exclude: ^frontend/tsconfig
       - id: check-added-large-files
         args: [--maxkb=1000]
       - id: check-merge-conflict
@@ -83,7 +84,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
-        exclude: package.lock.json
+        exclude: (package.lock.json|pnpm-lock\.yaml)
 
   # ===========================================
   # Commit message format

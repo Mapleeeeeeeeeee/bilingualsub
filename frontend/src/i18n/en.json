@@ -1,0 +1,48 @@
+{
+  "app": {
+    "title": "BilingualSub",
+    "subtitle": "YouTube Bilingual Subtitle Generator"
+  },
+  "form": {
+    "url_placeholder": "Paste YouTube video URL",
+    "source_lang": "Source Language",
+    "target_lang": "Target Language",
+    "submit": "Generate",
+    "submitting": "Submitting..."
+  },
+  "lang": {
+    "en": "English",
+    "zh-TW": "Traditional Chinese",
+    "ja": "Japanese",
+    "ko": "Korean"
+  },
+  "progress": {
+    "pending": "Waiting",
+    "downloading": "Downloading video...",
+    "transcribing": "Transcribing audio...",
+    "translating": "Translating subtitles...",
+    "merging": "Merging subtitles...",
+    "burning": "Burning subtitles...",
+    "completed": "Completed!",
+    "failed": "Processing failed"
+  },
+  "download": {
+    "title": "Download Results",
+    "srt": "Download SRT Subtitle",
+    "ass": "Download ASS Subtitle",
+    "video": "Download Burned Video"
+  },
+  "error": {
+    "invalid_url": "Please enter a valid YouTube URL",
+    "job_not_found": "Job not found",
+    "download_failed": "Video download failed",
+    "transcription_failed": "Transcription failed",
+    "translation_failed": "Translation failed",
+    "pipeline_failed": "Processing error occurred",
+    "network_error": "Network connection error",
+    "unknown_error": "An unknown error occurred"
+  },
+  "language_switcher": {
+    "label": "Language"
+  }
+}
