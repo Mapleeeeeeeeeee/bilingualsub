@@ -32,6 +32,8 @@ class Job:
     youtube_url: str
     source_lang: str
     target_lang: str
+    start_time: float | None = None
+    end_time: float | None = None
     status: JobStatus = JobStatus.PENDING
     progress: float = 0.0
     current_step: str | None = None
@@ -50,7 +52,14 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._cleanup_task: asyncio.Task[None] | None = None
 
-    def create_job(self, youtube_url: str, source_lang: str, target_lang: str) -> Job:
+    def create_job(
+        self,
+        youtube_url: str,
+        source_lang: str,
+        target_lang: str,
+        start_time: float | None = None,
+        end_time: float | None = None,
+    ) -> Job:
         """Create a new job and store it."""
         job_id = uuid.uuid4().hex[:12]
         job = Job(
@@ -58,6 +67,8 @@ class JobManager:
             youtube_url=youtube_url,
             source_lang=source_lang,
             target_lang=target_lang,
+            start_time=start_time,
+            end_time=end_time,
         )
         self._jobs[job_id] = job
         logger.info("job_created", job_id=job_id, youtube_url=youtube_url)

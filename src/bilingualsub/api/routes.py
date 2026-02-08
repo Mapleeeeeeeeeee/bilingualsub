@@ -52,6 +52,8 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
         youtube_url=str(body.youtube_url),
         source_lang=body.source_lang,
         target_lang=body.target_lang,
+        start_time=body.start_time,
+        end_time=body.end_time,
     )
     # Start pipeline in background; store ref to prevent GC
     request.app.state._background_tasks = getattr(

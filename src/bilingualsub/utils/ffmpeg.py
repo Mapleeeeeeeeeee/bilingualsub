@@ -122,3 +122,48 @@ def extract_audio(
         raise FFmpegError(f"Failed to extract audio: {error_message}") from e
 
     return output_path
+
+
+def trim_video(
+    video_path: Path,
+    output_path: Path,
+    start_time: float,
+    end_time: float,
+) -> Path:
+    """Trim video to specified time range using FFmpeg.
+
+    Args:
+        video_path: Input video file
+        output_path: Output trimmed video file
+        start_time: Start time in seconds
+        end_time: End time in seconds
+
+    Returns:
+        Path to output video file
+
+    Raises:
+        FFmpegError: If video file does not exist or ffmpeg fails
+    """
+    if not video_path.exists():
+        raise FFmpegError(f"Video file does not exist: {video_path}")
+    if not video_path.is_file():
+        raise FFmpegError(f"Video path is not a file: {video_path}")
+
+    try:
+        (
+            ffmpeg.input(str(video_path), ss=start_time, to=end_time)
+            .output(str(output_path), c="copy")
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except Exception as e:
+        if hasattr(e, "stderr") and e.stderr:
+            stderr = e.stderr
+            error_message = (
+                stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+            )
+        else:
+            error_message = str(e)
+        raise FFmpegError(f"Failed to trim video: {error_message}") from e
+
+    return output_path

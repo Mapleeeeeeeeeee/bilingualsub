@@ -27,7 +27,7 @@ from bilingualsub.core import (
     translate_subtitle,
 )
 from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
-from bilingualsub.utils import FFmpegError, burn_subtitles, extract_audio
+from bilingualsub.utils import FFmpegError, burn_subtitles, extract_audio, trim_video
 
 logger = structlog.get_logger()
 
@@ -117,6 +117,52 @@ def _make_translate_progress_cb(job: Job) -> Callable[[int, int], None]:
     return _on_progress
 
 
+async def _trim_if_needed(
+    job: Job,
+    video_path: Path,
+    work_dir: Path,
+    metadata_duration: float,
+    log: structlog.stdlib.BoundLogger,
+) -> Path:
+    """Trim video if time range is specified, returning the (possibly new) path."""
+    if job.start_time is None and job.end_time is None:
+        return video_path
+
+    _send_progress(job, JobStatus.DOWNLOADING, 12.0, "trim", "Trimming video")
+    t0 = time.monotonic()
+    trimmed_path = work_dir / "video_trimmed.mp4"
+    start = job.start_time if job.start_time is not None else 0.0
+    end = job.end_time if job.end_time is not None else metadata_duration
+    await asyncio.to_thread(trim_video, video_path, trimmed_path, start, end)
+    log.info(
+        "step_done",
+        step="trim",
+        duration_ms=int((time.monotonic() - t0) * 1000),
+    )
+    return trimmed_path
+
+
+async def _extract_audio_step(
+    job: Job,
+    video_path: Path,
+    work_dir: Path,
+    log: structlog.stdlib.BoundLogger,
+) -> Path:
+    """Extract audio from video, returning the audio file path."""
+    _send_progress(
+        job, JobStatus.DOWNLOADING, 15.0, "extract_audio", "Extracting audio"
+    )
+    t0 = time.monotonic()
+    audio_path = work_dir / "audio.mp3"
+    await asyncio.to_thread(extract_audio, video_path, audio_path)
+    log.info(
+        "step_done",
+        step="extract_audio",
+        duration_ms=int((time.monotonic() - t0) * 1000),
+    )
+    return audio_path
+
+
 async def run_pipeline(job: Job) -> None:
     """Execute the full subtitle generation pipeline for a job.
 
@@ -141,18 +187,13 @@ async def run_pipeline(job: Job) -> None:
             duration_ms=int((time.monotonic() - t0) * 1000),
         )
 
+        # --- Step 1.25: Trim video (if time range specified) ---
+        video_path = await _trim_if_needed(
+            job, video_path, work_dir, metadata.duration, log
+        )
+
         # --- Step 1.5: Extract audio ---
-        _send_progress(
-            job, JobStatus.DOWNLOADING, 15.0, "extract_audio", "Extracting audio"
-        )
-        t0 = time.monotonic()
-        audio_path = work_dir / "audio.mp3"
-        await asyncio.to_thread(extract_audio, video_path, audio_path)
-        log.info(
-            "step_done",
-            step="extract_audio",
-            duration_ms=int((time.monotonic() - t0) * 1000),
-        )
+        audio_path = await _extract_audio_step(job, video_path, work_dir, log)
 
         # --- Step 2: Transcribe ---
         _send_progress(
