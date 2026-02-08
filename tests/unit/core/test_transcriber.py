@@ -1,14 +1,32 @@
 """Unit tests for audio transcription."""
 
+from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from bilingualsub.core.subtitle import Subtitle
 from bilingualsub.core.transcriber import TranscriptionError, transcribe_audio
+from bilingualsub.utils.config import get_settings
 
 
 class TestTranscribeAudio:
     """Test cases for transcribe_audio function."""
+
+    @pytest.fixture(autouse=True)
+    def clear_settings_cache(self):
+        """Clear settings cache before each test."""
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    @pytest.fixture
+    def no_env_file(self, tmp_path, monkeypatch):
+        """Run test in a directory without .env file."""
+        monkeypatch.chdir(tmp_path)
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
 
     @pytest.fixture
     def mock_groq(self):
@@ -17,25 +35,18 @@ class TestTranscribeAudio:
             yield mock
 
     @pytest.fixture
-    def mock_parse_srt(self):
-        """Mock parse_srt function."""
-        with patch("bilingualsub.core.transcriber.parse_srt") as mock:
-            yield mock
-
-    @pytest.fixture
-    def valid_srt_content(self) -> str:
-        """Return valid SRT content."""
-        return """1
-00:00:00,000 --> 00:00:02,000
-Hello world
-
-2
-00:00:02,000 --> 00:00:04,000
-This is a test
-"""
+    def valid_verbose_json_response(self):
+        """Return a mock verbose_json transcription response."""
+        response = Mock()
+        response.segments = [
+            {"id": 0, "start": 0.0, "end": 2.0, "text": " Hello world"},
+            {"id": 1, "start": 2.0, "end": 4.0, "text": " This is a test"},
+        ]
+        response.text = "Hello world This is a test"
+        return response
 
     def test_transcribe_valid_audio_file(
-        self, tmp_path, mock_groq, mock_parse_srt, valid_srt_content, monkeypatch
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
     ):
         """Test transcribing a valid audio file."""
         # Set API key
@@ -50,11 +61,9 @@ This is a test
         mock_groq.return_value = mock_client
 
         # Mock transcription response
-        mock_client.audio.transcriptions.create.return_value = valid_srt_content
-
-        # Mock parse_srt
-        mock_subtitle = Mock()
-        mock_parse_srt.return_value = mock_subtitle
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
 
         # Transcribe audio
         result = transcribe_audio(audio_path)
@@ -66,21 +75,23 @@ This is a test
         mock_client.audio.transcriptions.create.assert_called_once()
         call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
         assert call_kwargs["model"] == "whisper-large-v3-turbo"
-        assert call_kwargs["response_format"] == "srt"
+        assert call_kwargs["response_format"] == "verbose_json"
         assert call_kwargs["language"] == "en"
         assert call_kwargs["file"][0] == "audio.mp3"
         # File handle is passed directly (not bytes) for memory efficiency
         assert hasattr(call_kwargs["file"][1], "read")
 
-        # Verify parse_srt was called
-        mock_parse_srt.assert_called_once_with(valid_srt_content)
+        # Verify result is a real Subtitle object
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 2
+        assert result.entries[0].text == "Hello world"
+        assert result.entries[0].start == timedelta(0)
+        assert result.entries[0].end == timedelta(seconds=2)
+        assert result.entries[1].text == "This is a test"
+        assert result.entries[1].start == timedelta(seconds=2)
+        assert result.entries[1].end == timedelta(seconds=4)
 
-        # Verify result
-        assert result == mock_subtitle
-
-    def test_transcribe_with_chinese_language(
-        self, tmp_path, mock_groq, mock_parse_srt, monkeypatch
-    ):
+    def test_transcribe_with_chinese_language(self, tmp_path, mock_groq, monkeypatch):
         """Test transcribing with Chinese language parameter."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
@@ -89,19 +100,22 @@ This is a test
 
         mock_client = MagicMock()
         mock_groq.return_value = mock_client
-        mock_client.audio.transcriptions.create.return_value = (
-            "1\n00:00:00,000 --> 00:00:01,000\n你好"
-        )
 
-        mock_subtitle = Mock()
-        mock_parse_srt.return_value = mock_subtitle
+        # Mock verbose_json response with Chinese text
+        response = Mock()
+        response.segments = [{"id": 0, "start": 0.0, "end": 1.0, "text": " 你好"}]
+        mock_client.audio.transcriptions.create.return_value = response
 
         result = transcribe_audio(audio_path, language="zh")
 
         # Verify language parameter was passed
         call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
         assert call_kwargs["language"] == "zh"
-        assert result == mock_subtitle
+
+        # Verify result
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 1
+        assert result.entries[0].text == "你好"
 
     def test_audio_file_not_exists_raises_error(self, tmp_path, monkeypatch):
         """Test that non-existent audio file raises error."""
@@ -134,7 +148,7 @@ This is a test
         with pytest.raises(ValueError, match=r"File size .* exceeds Groq's 25MB limit"):
             transcribe_audio(audio_path)
 
-    def test_missing_api_key_raises_error(self, tmp_path, monkeypatch):
+    def test_missing_api_key_raises_error(self, tmp_path, monkeypatch, no_env_file):
         """Test that missing GROQ_API_KEY raises error."""
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
@@ -164,10 +178,10 @@ This is a test
         with pytest.raises(TranscriptionError, match="Failed to transcribe audio"):
             transcribe_audio(audio_path)
 
-    def test_parse_srt_error_raises_transcription_error(
-        self, tmp_path, mock_groq, mock_parse_srt, monkeypatch
+    def test_malformed_segments_raises_transcription_error(
+        self, tmp_path, mock_groq, monkeypatch
     ):
-        """Test that parse_srt error raises TranscriptionError."""
+        """Test that malformed segments data raises TranscriptionError."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
         audio_path = tmp_path / "audio.mp3"
@@ -175,18 +189,40 @@ This is a test
 
         mock_client = MagicMock()
         mock_groq.return_value = mock_client
-        mock_client.audio.transcriptions.create.return_value = "invalid srt"
 
-        mock_parse_srt.side_effect = Exception("Invalid SRT format")
+        # Mock response with malformed segments (missing "text" key)
+        response = Mock()
+        response.segments = [{"id": 0, "start": 0.0, "end": 1.0}]  # missing "text"
+        mock_client.audio.transcriptions.create.return_value = response
 
         with pytest.raises(
             TranscriptionError, match="Failed to parse transcription result"
         ):
             transcribe_audio(audio_path)
 
-    def test_file_exactly_25mb_is_accepted(
-        self, tmp_path, mock_groq, mock_parse_srt, monkeypatch
+    def test_empty_segments_raises_transcription_error(
+        self, tmp_path, mock_groq, monkeypatch
     ):
+        """Test that empty segments list raises TranscriptionError."""
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+
+        # Mock response with empty segments
+        response = Mock()
+        response.segments = []
+        mock_client.audio.transcriptions.create.return_value = response
+
+        with pytest.raises(
+            TranscriptionError, match="Transcription returned no segments"
+        ):
+            transcribe_audio(audio_path)
+
+    def test_file_exactly_25mb_is_accepted(self, tmp_path, mock_groq, monkeypatch):
         """Test that file exactly 25MB is accepted."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
@@ -197,20 +233,19 @@ This is a test
 
         mock_client = MagicMock()
         mock_groq.return_value = mock_client
-        mock_client.audio.transcriptions.create.return_value = (
-            "1\n00:00:00,000 --> 00:00:01,000\nTest"
-        )
 
-        mock_subtitle = Mock()
-        mock_parse_srt.return_value = mock_subtitle
+        # Mock verbose_json response
+        response = Mock()
+        response.segments = [{"id": 0, "start": 0.0, "end": 1.0, "text": " Test"}]
+        mock_client.audio.transcriptions.create.return_value = response
 
         # Should not raise
         result = transcribe_audio(audio_path)
-        assert result == mock_subtitle
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 1
+        assert result.entries[0].text == "Test"
 
-    def test_various_audio_formats(
-        self, tmp_path, mock_groq, mock_parse_srt, monkeypatch
-    ):
+    def test_various_audio_formats(self, tmp_path, mock_groq, monkeypatch):
         """Test transcription with various audio file formats."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
@@ -218,25 +253,26 @@ This is a test
 
         mock_client = MagicMock()
         mock_groq.return_value = mock_client
-        mock_client.audio.transcriptions.create.return_value = (
-            "1\n00:00:00,000 --> 00:00:01,000\nTest"
-        )
 
-        mock_subtitle = Mock()
-        mock_parse_srt.return_value = mock_subtitle
+        # Mock verbose_json response
+        response = Mock()
+        response.segments = [{"id": 0, "start": 0.0, "end": 1.0, "text": " Test"}]
+        mock_client.audio.transcriptions.create.return_value = response
 
         for fmt in formats:
             audio_path = tmp_path / f"audio{fmt}"
             audio_path.write_bytes(b"fake audio")
 
             result = transcribe_audio(audio_path)
-            assert result == mock_subtitle
+            assert isinstance(result, Subtitle)
+            assert len(result.entries) == 1
+            assert result.entries[0].text == "Test"
 
             # Verify correct filename was sent
             call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
             assert call_kwargs["file"][0] == f"audio{fmt}"
 
-    def test_empty_api_key_raises_error(self, tmp_path, monkeypatch):
+    def test_empty_api_key_raises_error(self, tmp_path, monkeypatch, no_env_file):
         """Test that empty GROQ_API_KEY raises error."""
         monkeypatch.setenv("GROQ_API_KEY", "")
 
@@ -249,9 +285,7 @@ This is a test
             transcribe_audio(audio_path)
 
     @pytest.mark.unit
-    def test_default_language_is_english(
-        self, tmp_path, mock_groq, mock_parse_srt, monkeypatch
-    ):
+    def test_default_language_is_english(self, tmp_path, mock_groq, monkeypatch):
         """Test that default language is English."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
@@ -260,12 +294,11 @@ This is a test
 
         mock_client = MagicMock()
         mock_groq.return_value = mock_client
-        mock_client.audio.transcriptions.create.return_value = (
-            "1\n00:00:00,000 --> 00:00:01,000\nTest"
-        )
 
-        mock_subtitle = Mock()
-        mock_parse_srt.return_value = mock_subtitle
+        # Mock verbose_json response
+        response = Mock()
+        response.segments = [{"id": 0, "start": 0.0, "end": 1.0, "text": " Test"}]
+        mock_client.audio.transcriptions.create.return_value = response
 
         transcribe_audio(audio_path)
 

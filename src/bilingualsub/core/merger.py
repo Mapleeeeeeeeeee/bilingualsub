@@ -1,6 +1,6 @@
 """Merge original and translated subtitle entries into bilingual format."""
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from bilingualsub.core.subtitle import SubtitleEntry
 

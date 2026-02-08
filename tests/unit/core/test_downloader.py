@@ -124,6 +124,8 @@ class TestDownloadYoutubeVideo:
     def mock_subprocess(self):
         """Mock subprocess for ffprobe."""
         with patch("bilingualsub.core.downloader.subprocess") as mock:
+            # Preserve the real CalledProcessError so exception handling works
+            mock.CalledProcessError = subprocess.CalledProcessError
             yield mock
 
     @pytest.fixture
@@ -146,21 +148,32 @@ class TestDownloadYoutubeVideo:
             }
         )
 
+    @patch("bilingualsub.core.downloader.shutil.which")
     def test_download_valid_youtube_url(
-        self, tmp_path, mock_yt_dlp, mock_subprocess, valid_ffprobe_output
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess, valid_ffprobe_output
     ):
         """Test downloading a valid YouTube video."""
+        # Mock FFmpeg being available
+        mock_which.return_value = "/usr/bin/ffmpeg"
+
         output_path = tmp_path / "video.mp4"
 
         # Mock yt-dlp download
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
 
-        # Simulate file creation
-        def create_video_file(*args, **kwargs):
+        # Mock extract_info to return info_dict and create file
+        def extract_info_side_effect(url, download=True):
             output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
 
-        mock_ydl_instance.download.side_effect = create_video_file
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
         # Mock ffprobe
         mock_result = Mock()
@@ -179,8 +192,8 @@ class TestDownloadYoutubeVideo:
         assert "outtmpl" in ydl_opts
         assert ydl_opts["merge_output_format"] == "mp4"
 
-        mock_ydl_instance.download.assert_called_once_with(
-            ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
+        mock_ydl_instance.extract_info.assert_called_once_with(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=True
         )
 
         # Verify ffprobe was called
@@ -204,9 +217,18 @@ class TestDownloadYoutubeVideo:
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
         mock_result = Mock()
         mock_result.stdout = valid_ffprobe_output
@@ -215,7 +237,7 @@ class TestDownloadYoutubeVideo:
         metadata = download_youtube_video("https://youtu.be/dQw4w9WgXcQ", output_path)
 
         assert metadata.title == "Test Video"
-        mock_ydl_instance.download.assert_called_once()
+        mock_ydl_instance.extract_info.assert_called_once()
 
     def test_empty_url_raises_error(self, tmp_path):
         """Test that empty URL raises error."""
@@ -256,50 +278,73 @@ class TestDownloadYoutubeVideo:
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = Exception("Network error")
+        mock_ydl_instance.extract_info.side_effect = Exception("Network error")
 
         with pytest.raises(DownloadError, match="Failed to download video"):
             download_youtube_video(
                 "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
             )
 
-    def test_ffprobe_error_raises_download_error_and_cleans_up(
+    def test_ffprobe_error_falls_back_to_info_dict(
         self, tmp_path, mock_yt_dlp, mock_subprocess
     ):
-        """Test that ffprobe error raises DownloadError and cleans up file."""
+        """Test that ffprobe error falls back to info_dict metadata."""
         output_path = tmp_path / "video.mp4"
 
         # Mock yt-dlp download
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
 
-        # Mock ffprobe error
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video from Info",
+                "duration": 150.0,
+                "width": 1280,
+                "height": 720,
+                "fps": 25.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe error - should trigger fallback
         mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
 
-        with pytest.raises(DownloadError, match="Failed to extract metadata"):
-            download_youtube_video(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-            )
+        # Should succeed using info_dict fallback
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
+        )
 
-        # Verify file was cleaned up
-        assert not output_path.exists()
+        # Verify fallback metadata was used
+        assert metadata.title == "Test Video from Info"
+        assert metadata.duration == 150.0
+        assert metadata.width == 1280
+        assert metadata.height == 720
+        assert metadata.fps == 25.0
+        assert output_path.exists()
 
-    def test_ffprobe_no_video_stream_raises_error(
+    def test_ffprobe_no_video_stream_raises_error_and_cleans_up(
         self, tmp_path, mock_yt_dlp, mock_subprocess
     ):
-        """Test that missing video stream in ffprobe output raises error."""
+        """Test that missing video stream in ffprobe raises error and cleans up."""
         output_path = tmp_path / "video.mp4"
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
 
-        # Mock ffprobe with no video stream
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe with no video stream - raises DownloadError from line 189
         mock_result = Mock()
         mock_result.stdout = json.dumps(
             {
@@ -311,7 +356,8 @@ class TestDownloadYoutubeVideo:
         )
         mock_subprocess.run.return_value = mock_result
 
-        with pytest.raises(DownloadError, match="No video stream found"):
+        # DownloadError is caught by line 85's except block and re-raised
+        with pytest.raises(DownloadError, match="Failed to extract metadata"):
             download_youtube_video(
                 "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
             )
@@ -319,19 +365,28 @@ class TestDownloadYoutubeVideo:
         # Verify file was cleaned up
         assert not output_path.exists()
 
-    def test_ffprobe_invalid_json_raises_error(
+    def test_ffprobe_invalid_json_raises_error_and_cleans_up(
         self, tmp_path, mock_yt_dlp, mock_subprocess
     ):
-        """Test that invalid JSON from ffprobe raises error."""
+        """Test that invalid JSON from ffprobe raises error and cleans up."""
         output_path = tmp_path / "video.mp4"
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
 
-        # Mock ffprobe with invalid JSON
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe with invalid JSON - raises JSONDecodeError (caught by line 85)
         mock_result = Mock()
         mock_result.stdout = "invalid json"
         mock_subprocess.run.return_value = mock_result
@@ -341,6 +396,7 @@ class TestDownloadYoutubeVideo:
                 "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
             )
 
+        # Verify file was cleaned up
         assert not output_path.exists()
 
     def test_ffprobe_missing_title_uses_filename(
@@ -351,9 +407,18 @@ class TestDownloadYoutubeVideo:
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
         # Mock ffprobe without title
         mock_result = Mock()
@@ -387,9 +452,18 @@ class TestDownloadYoutubeVideo:
 
         mock_ydl_instance = MagicMock()
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
-        mock_ydl_instance.download.side_effect = (
-            lambda *args, **kwargs: output_path.touch()
-        )
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
         # Mock ffprobe with fractional fps
         mock_result = Mock()
@@ -427,10 +501,17 @@ class TestDownloadYoutubeVideo:
         mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
 
         # Simulate yt-dlp creating .mp4 instead
-        def create_mp4_file(*args, **kwargs):
+        def extract_info_side_effect(url, download=True):
             (tmp_path / "video.mp4").touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
 
-        mock_ydl_instance.download.side_effect = create_mp4_file
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
         mock_result = Mock()
         mock_result.stdout = valid_ffprobe_output

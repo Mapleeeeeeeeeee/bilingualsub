@@ -3,7 +3,7 @@
 # Run all: uv run pre-commit run --all-files
 
 default_language_version:
-  python: python3.11
+  python: python3.13
 
 repos:
   # ===========================================
@@ -29,7 +29,7 @@ repos:
   # Ruff - Fast Python linter & formatter
   # ===========================================
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0
+    rev: v0.14.14
     hooks:
       # Linter
       - id: ruff
@@ -46,8 +46,12 @@ repos:
       - id: mypy
         additional_dependencies:
           - pydantic>=2.0.0
+          - pydantic-settings>=2.0.0
           - typer>=0.12.0
           - types-requests
+          - fastapi>=0.115.0
+          - structlog>=24.0.0
+          - sse-starlette>=2.0.0
         args: [--config-file=pyproject.toml]
         pass_filenames: false
         entry: bash -c 'mypy src/'
@@ -56,7 +60,7 @@ repos:
   # Vulture - Dead code detection
   # ===========================================
   - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.11
+    rev: v2.14
     hooks:
       - id: vulture
         args: [src/bilingualsub, --min-confidence=80]
@@ -91,5 +95,5 @@ repos:
         stages: [commit-msg]
 
 ci:
-  autofix_commit_msg: "style: auto-fix by pre-commit hooks"
-  autoupdate_commit_msg: "chore: update pre-commit hooks"
+  autofix_commit_msg: 'style: auto-fix by pre-commit hooks'
+  autoupdate_commit_msg: 'chore: update pre-commit hooks'

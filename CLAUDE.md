@@ -3,6 +3,7 @@
 ## 專案概述
 
 YouTube 雙語字幕自動生成工具：
+
 ```
 YouTube URL → 下載 → Whisper ASR → LLM 翻譯 → 雙語字幕 → 燒錄影片
 ```
@@ -24,15 +25,15 @@ uv run playwright install chromium
 
 所有代碼必須通過以下檢查：
 
-| 檢查項目 | 指令 | 說明 |
-|---------|------|------|
-| Ruff lint | `uv run ruff check src/ tests/` | 程式碼風格 |
-| Ruff format | `uv run ruff format --check src/ tests/` | 格式化 |
-| Mypy | `uv run mypy src/` | 靜態類型檢查 |
-| Vulture | `uv run vulture src/bilingualsub --min-confidence=80` | Dead code 偵測 |
-| Prettier | `npx prettier --check "**/*.{js,jsx,ts,tsx,json,yaml,md}"` | 前端格式化 |
-| Unit tests | `uv run pytest tests/unit -m unit` | 單元測試 |
-| Coverage | >= 80% | 測試覆蓋率 |
+| 檢查項目    | 指令                                                       | 說明           |
+| ----------- | ---------------------------------------------------------- | -------------- |
+| Ruff lint   | `uv run ruff check src/ tests/`                            | 程式碼風格     |
+| Ruff format | `uv run ruff format --check src/ tests/`                   | 格式化         |
+| Mypy        | `uv run mypy src/`                                         | 靜態類型檢查   |
+| Vulture     | `uv run vulture src/bilingualsub --min-confidence=80`      | Dead code 偵測 |
+| Prettier    | `npx prettier --check "**/*.{js,jsx,ts,tsx,json,yaml,md}"` | 前端格式化     |
+| Unit tests  | `uv run pytest tests/unit -m unit`                         | 單元測試       |
+| Coverage    | >= 80%                                                     | 測試覆蓋率     |
 
 ## Claude Hooks
 
@@ -61,6 +62,7 @@ uv run pytest
 ## 開發流程
 
 ### 使用 Ralph Loop 開發模組
+
 ```bash
 /ralph-loop "實作 downloader 模組，通過所有測試" \
   --completion-promise 'ALL TESTS PASS' \
@@ -68,6 +70,7 @@ uv run pytest
 ```
 
 ### 每個模組的完成標準
+
 1. 單元測試通過
 2. 整合測試通過
 3. Lint/Format 通過
@@ -87,11 +90,9 @@ src/bilingualsub/
 ├── formats/        # 字幕格式處理
 │   ├── srt.py
 │   └── ass.py
-├── utils/          # 工具函數
-│   ├── ffmpeg.py
-│   └── config.py
-├── cli.py          # CLI 入口
-└── api.py          # Web API 入口
+└── utils/          # 工具函數
+    ├── ffmpeg.py
+    └── config.py
 ```
 
 ## 環境變數

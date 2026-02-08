@@ -24,21 +24,6 @@
     ]
   },
   "permissions": {
-    "allow": [
-      "Bash(uv run pytest:*)",
-      "Bash(uv run ruff:*)",
-      "Bash(uv run mypy:*)",
-      "Bash(uv run vulture:*)",
-      "Bash(uv run pre-commit:*)",
-      "Bash(uv sync:*)",
-      "Bash(git status:*)",
-      "Bash(git diff:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git log:*)",
-      "Bash(git branch:*)",
-      "Bash(git checkout:*)",
-      "Bash(npx prettier:*)"
-    ]
+    "allow": ["Bash(*)", "Edit", "Write", "Read", "Glob", "Grep", "Task"]
   }
 }

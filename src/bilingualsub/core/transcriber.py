@@ -67,7 +67,7 @@ def transcribe_audio(audio_path: Path, *, language: str = "en") -> Subtitle:
 
     # Parse verbose_json response into Subtitle
     try:
-        segments: list[dict[str, Any]] = transcription.segments  # type: ignore[attr-defined]
+        segments: list[dict[str, Any]] = transcription.segments
         if not segments:
             raise TranscriptionError("Transcription returned no segments")
 

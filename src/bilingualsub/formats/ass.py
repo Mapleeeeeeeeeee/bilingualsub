@@ -6,7 +6,11 @@ from bilingualsub.core.subtitle import Subtitle
 
 
 def serialize_bilingual_ass(
-    original: Subtitle, translated: Subtitle, *, video_width: int, video_height: int
+    original: Subtitle,
+    translated: Subtitle,
+    *,
+    video_width: int,
+    video_height: int,
 ) -> str:
     """Serialize two Subtitle objects to ASS format for bilingual display.
 
@@ -21,7 +25,15 @@ def serialize_bilingual_ass(
 
     Raises:
         ValueError: If subtitles have mismatched number of entries
+
+    Note:
+        video_width and video_height parameters are accepted for API compatibility
+        but no longer used internally. PlayRes is fixed at 1920x1080 for consistent
+        rendering across all video resolutions.
     """
+    # Kept for API compatibility - suppress vulture warnings
+    _ = (video_width, video_height)
+
     if len(original.entries) != len(translated.entries):
         raise ValueError(
             f"Original and translated subtitles must have same number of entries: "
@@ -29,35 +41,53 @@ def serialize_bilingual_ass(
         )
 
     # ASS header with fixed styling
+    # Note: ASS format requires specific long format strings - these are spec-compliant
+    style_format = (
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding"
+    )
+    # Yellow text (&H0000FFFF) with black outline (&H00000000)
+    style_params = "&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0"
+    trans_style = f"Style: Translated,Arial,48,{style_params},1,2,0,2,10,10,140,1"
+    orig_style = f"Style: Original,Arial,36,{style_params},1,2,0,2,10,10,60,1"
+    event_format = (
+        "Format: Layer, Start, End, Style, Name, "
+        "MarginL, MarginR, MarginV, Effect, Text"
+    )
+
     header = f"""[Script Info]
 Title: Bilingual Subtitle
 ScriptType: v4.00+
-PlayResX: {video_width}
-PlayResY: {video_height}
+PlayResX: 1920
+PlayResY: 1080
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Translated,Arial,20,&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,40,1
-Style: Original,Arial,20,&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+{style_format}
+{trans_style}
+{orig_style}
 
 [Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+{event_format}
 """
 
     # Build dialogue lines
     dialogue_lines = []
-    for orig_entry, trans_entry in zip(original.entries, translated.entries):
+    for orig_entry, trans_entry in zip(
+        original.entries, translated.entries, strict=True
+    ):
         # Format time as H:MM:SS.cc (centiseconds)
         start_time = _format_ass_time(orig_entry.start)
         end_time = _format_ass_time(orig_entry.end)
 
-        # Add translated line (appears higher with MarginV=40)
+        # Add translated line (appears higher with MarginV=140)
         trans_text = _escape_ass_text(trans_entry.text)
         dialogue_lines.append(
             f"Dialogue: 0,{start_time},{end_time},Translated,,0,0,0,,{trans_text}"
         )
 
-        # Add original line (appears lower with MarginV=10, closer to bottom edge)
+        # Add original line (appears lower with MarginV=60, closer to bottom edge)
         orig_text = _escape_ass_text(orig_entry.text)
         dialogue_lines.append(
             f"Dialogue: 0,{start_time},{end_time},Original,,0,0,0,,{orig_text}"

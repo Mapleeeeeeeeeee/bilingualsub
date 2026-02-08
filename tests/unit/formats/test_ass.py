@@ -49,8 +49,8 @@ class TestSerializeBilingualASS:
         assert "Style: Original" in result
         assert "&H0000FFFF" in result  # Yellow color
         assert "&H00000000" in result  # Black outline
-        assert ",2,0,2,10,10,40," in result  # Translated MarginV=40
-        assert ",2,0,2,10,10,10," in result  # Original MarginV=10
+        assert ",2,0,2,10,10,140," in result  # Translated MarginV=140
+        assert ",2,0,2,10,10,60," in result  # Original MarginV=60
 
         # Check dialogue lines
         assert (
@@ -207,8 +207,8 @@ class TestSerializeBilingualASS:
             "Dialogue: 0,1:30:45.12,2:45:30.45,Original,,0,0,0,,Long duration" in result
         )
 
-    def test_serialize_different_video_resolutions(self):
-        """Test that video resolution affects PlayRes values."""
+    def test_serialize_uses_fixed_playres_regardless_of_input(self):
+        """Test that PlayRes is always 1920x1080 regardless of input resolution."""
         original = Subtitle(
             entries=[
                 SubtitleEntry(
@@ -230,26 +230,19 @@ class TestSerializeBilingualASS:
             ]
         )
 
-        # Test 1080p
-        result_1080p = serialize_bilingual_ass(
-            original, translated, video_width=1920, video_height=1080
-        )
-        assert "PlayResX: 1920" in result_1080p
-        assert "PlayResY: 1080" in result_1080p
-
-        # Test 720p
+        # Test 720p input -> still 1920x1080 PlayRes
         result_720p = serialize_bilingual_ass(
             original, translated, video_width=1280, video_height=720
         )
-        assert "PlayResX: 1280" in result_720p
-        assert "PlayResY: 720" in result_720p
+        assert "PlayResX: 1920" in result_720p
+        assert "PlayResY: 1080" in result_720p
 
-        # Test 4K
+        # Test 4K input -> still 1920x1080 PlayRes
         result_4k = serialize_bilingual_ass(
             original, translated, video_width=3840, video_height=2160
         )
-        assert "PlayResX: 3840" in result_4k
-        assert "PlayResY: 2160" in result_4k
+        assert "PlayResX: 1920" in result_4k
+        assert "PlayResY: 1080" in result_4k
 
     def test_serialize_mismatched_entry_counts_raises_error(self):
         """Test that mismatched entry counts raise error."""

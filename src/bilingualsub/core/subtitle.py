@@ -1,5 +1,6 @@
 """Subtitle domain models."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -13,7 +14,7 @@ class SubtitleEntry:
     end: timedelta
     text: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate subtitle entry constraints."""
         if self.start >= self.end:
             raise ValueError(
@@ -31,7 +32,7 @@ class Subtitle:
 
     entries: list[SubtitleEntry]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate subtitle collection constraints."""
         if not self.entries:
             raise ValueError("Subtitle must contain at least one entry")
@@ -59,7 +60,7 @@ class Subtitle:
         """Return number of entries."""
         return len(self.entries)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[SubtitleEntry]:
         """Iterate over entries."""
         return iter(self.entries)
 
