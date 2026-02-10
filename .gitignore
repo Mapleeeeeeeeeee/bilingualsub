@@ -81,6 +81,12 @@ node_modules/
 .next/
 out/
 
+# Vite
+frontend/.vite/
+
+# Claude Code
+.claude/settings.local.json
+
 # Logs
 *.log
 logs/
