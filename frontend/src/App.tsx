@@ -9,7 +9,7 @@ import { useJob } from './hooks/useJob';
 
 function App() {
   const { t } = useTranslation();
-  const { state, submitJob, burnJob, reset } = useJob();
+  const { state, submitJob, burnJob, reset, backToEdit } = useJob();
 
   const isIdle = state.phase === 'idle';
   const isProcessing = state.phase === 'submitting' || state.phase === 'processing';
@@ -98,14 +98,6 @@ function App() {
               <div className="w-24"></div> {/* Spacer for balance */}
             </div>
 
-            {/* Downloads (no video yet) */}
-            <div className="max-w-md mx-auto space-y-8">
-              <div>
-                <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
-                <DownloadLinks jobId={state.jobId!} showVideo={false} />
-              </div>
-            </div>
-
             {/* Editor Section */}
             <div className="border-t border-gray-100 pt-16">
               <div className="max-w-6xl mx-auto">
@@ -167,16 +159,20 @@ function App() {
                   <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
                   <DownloadLinks jobId={state.jobId!} showVideo={true} />
                 </div>
-                <div className="p-6 bg-gray-50 rounded-3xl">
-                  <p className="text-sm text-gray-500 leading-relaxed">{t('app.downloads_desc')}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Editor Section (can re-edit and re-burn) */}
-            <div className="border-t border-gray-100 pt-16">
-              <div className="max-w-6xl mx-auto">
-                <SubtitleEditor jobId={state.jobId!} onBurn={burnJob} isBurning={false} />
+                <button
+                  onClick={backToEdit}
+                  className="flex items-center justify-center gap-2 w-full text-sm text-gray-500 hover:text-black transition-colors py-3 border border-gray-200 hover:border-black rounded-full"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    />
+                  </svg>
+                  {t('app.back_to_edit')}
+                </button>
               </div>
             </div>
           </div>

@@ -24,7 +24,8 @@ type JobAction =
   | { type: 'BURN_START' }
   | { type: 'BURN_PROGRESS'; data: SSEProgressData }
   | { type: 'BURN_COMPLETE' }
-  | { type: 'BURN_ERROR'; error: { code: string; message: string; detail?: string } };
+  | { type: 'BURN_ERROR'; error: { code: string; message: string; detail?: string } }
+  | { type: 'BACK_TO_EDIT' };
 
 const initialState: JobState = {
   phase: 'idle',
@@ -75,6 +76,8 @@ function jobReducer(state: JobState, action: JobAction): JobState {
       return { ...state, phase: 'burned' as const, progress: 100, status: JobStatus.COMPLETED };
     case 'BURN_ERROR':
       return { ...state, phase: 'completed' as const, error: action.error };
+    case 'BACK_TO_EDIT':
+      return { ...state, phase: 'completed' as const };
     case 'RESET':
       return initialState;
     default:
@@ -163,5 +166,9 @@ export function useJob() {
     dispatch({ type: 'RESET' });
   }, [cleanup]);
 
-  return { state, submitJob, burnJob, reset };
+  const backToEdit = useCallback(() => {
+    dispatch({ type: 'BACK_TO_EDIT' });
+  }, []);
+
+  return { state, submitJob, burnJob, reset, backToEdit };
 }

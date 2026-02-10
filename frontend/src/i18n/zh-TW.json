@@ -7,7 +7,8 @@
     "error_title": "發生錯誤",
     "start_over": "重新開始",
     "downloads_title": "下載檔案",
-    "downloads_desc": "您的影片已處理完成。您可以下載獨立字幕檔或已燒錄字幕的影片。"
+    "downloads_desc": "您的影片已處理完成。您可以下載獨立字幕檔或已燒錄字幕的影片。",
+    "back_to_edit": "重新編輯字幕"
   },
   "form": {
     "url_placeholder": "貼上 YouTube 影片網址",
@@ -83,5 +84,13 @@
     "burn": "燒錄字幕",
     "burning": "燒錄中...",
     "deleteEntry": "刪除字幕"
+  },
+  "disclaimer": {
+    "title": "下載前請閱讀",
+    "tool_desc": "BilingualSub 是一款開源的雙語字幕生成工具，旨在協助語言學習與跨語言內容理解。",
+    "copyright_title": "著作權聲明",
+    "copyright_desc": "本工具產生的字幕僅供個人學習與研究使用。請尊重原始內容的著作權，勿將下載內容用於商業用途或未經授權的散布。使用者需自行承擔使用本工具所產生的一切法律責任。",
+    "cancel": "取消",
+    "confirm": "我了解，開始下載"
   }
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/api/client';
 import { FileType } from '@/constants';
 import { parseSrt, serializeSrt, srtTimeToSeconds, isValidSrtTime } from '@/utils/srt';
+import { triggerDownload } from '@/utils/download';
 import type { SrtEntry } from '@/types';
 
 interface SubtitleEditorProps {
@@ -145,10 +146,7 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
     const content = serializeSrt(entries);
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bilingualsub-edited.srt';
-    a.click();
+    triggerDownload(url, 'bilingualsub-edited.srt');
     URL.revokeObjectURL(url);
   }, [entries]);
 
