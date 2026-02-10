@@ -62,3 +62,19 @@ export function srtTimeToSeconds(srtTime: string): number {
   const [h, m, s] = hms.split(':').map(Number);
   return h * 3600 + m * 60 + s + Number(ms) / 1000;
 }
+
+/**
+ * Validates whether a string matches the SRT timestamp format: HH:MM:SS,mmm
+ * and that hours, minutes (0-59), and seconds (0-59) are in valid ranges.
+ */
+export function isValidSrtTime(value: string): boolean {
+  const regex = /^\d{2}:\d{2}:\d{2},\d{3}$/;
+  if (!regex.test(value)) {
+    return false;
+  }
+
+  const [hms, ms] = value.split(',');
+  const [h, m, s] = hms.split(':').map(Number);
+
+  return m >= 0 && m <= 59 && s >= 0 && s <= 59;
+}

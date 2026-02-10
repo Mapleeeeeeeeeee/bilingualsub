@@ -61,7 +61,7 @@ def burn_subtitles(
             "PrimaryColour=&H0000FFFF,"
             "OutlineColour=&H00000000,"
             "Outline=2,Shadow=0,"
-            "Alignment=2,MarginV=30"
+            "Alignment=2,MarginL=30,MarginR=30,MarginV=30"
         )
         vf_filter = f"subtitles={subtitle_path}:force_style='{force_style}'"
 

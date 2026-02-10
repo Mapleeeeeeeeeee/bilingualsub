@@ -50,8 +50,8 @@ def serialize_bilingual_ass(
     )
     # Yellow text (&H0000FFFF) with black outline (&H00000000)
     style_params = "&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0"
-    trans_style = f"Style: Translated,Arial,48,{style_params},1,2,0,2,10,10,140,1"
-    orig_style = f"Style: Original,Arial,36,{style_params},1,2,0,2,10,10,60,1"
+    trans_style = f"Style: Translated,Arial,28,{style_params},1,2,0,2,30,30,140,1"
+    orig_style = f"Style: Original,Arial,18,{style_params},1,2,0,2,30,30,60,1"
     event_format = (
         "Format: Layer, Start, End, Style, Name, "
         "MarginL, MarginR, MarginV, Effect, Text"

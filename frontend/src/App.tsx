@@ -25,7 +25,7 @@ function App() {
         <LanguageSwitcher />
       </header>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto px-6 py-12 flex flex-col justify-center min-h-screen transition-all duration-700 ease-in-out">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-12 flex flex-col justify-center min-h-screen transition-all duration-700 ease-in-out">
         {/* IDLE STATE: Hero Input */}
         {isIdle && (
           <div className="max-w-2xl mx-auto w-full space-y-12 animate-fade-in-up">
@@ -108,7 +108,7 @@ function App() {
 
             {/* Editor Section */}
             <div className="border-t border-gray-100 pt-16">
-              <div className="max-w-3xl mx-auto">
+              <div className="max-w-6xl mx-auto">
                 <SubtitleEditor jobId={state.jobId!} onBurn={burnJob} isBurning={false} />
               </div>
             </div>
@@ -175,7 +175,7 @@ function App() {
 
             {/* Editor Section (can re-edit and re-burn) */}
             <div className="border-t border-gray-100 pt-16">
-              <div className="max-w-3xl mx-auto">
+              <div className="max-w-6xl mx-auto">
                 <SubtitleEditor jobId={state.jobId!} onBurn={burnJob} isBurning={false} />
               </div>
             </div>

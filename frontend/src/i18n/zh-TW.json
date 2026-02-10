@@ -81,6 +81,7 @@
     "audioHint": "點擊字幕可跳轉播放對應音訊",
     "videoHint": "點擊字幕可跳轉播放對應位置",
     "burn": "燒錄字幕",
-    "burning": "燒錄中..."
+    "burning": "燒錄中...",
+    "deleteEntry": "刪除字幕"
   }
 }

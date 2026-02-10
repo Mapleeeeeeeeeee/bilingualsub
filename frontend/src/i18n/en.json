@@ -81,6 +81,7 @@
     "audioHint": "Click on a subtitle entry to jump to the corresponding audio",
     "videoHint": "Click on a subtitle entry to jump to the corresponding position",
     "burn": "Burn Subtitles",
-    "burning": "Burning..."
+    "burning": "Burning...",
+    "deleteEntry": "Delete entry"
   }
 }
