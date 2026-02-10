@@ -1,5 +1,7 @@
 """FFmpeg utilities for burning subtitles into videos."""
 
+import json
+import subprocess
 from pathlib import Path
 
 import ffmpeg
@@ -53,8 +55,15 @@ def burn_subtitles(
         # Use ass filter for ASS subtitles
         vf_filter = f"ass={subtitle_path}"
     else:
-        # Use subtitles filter for SRT subtitles
-        vf_filter = f"subtitles={subtitle_path}"
+        # Use subtitles filter for SRT subtitles with yellow text + black outline
+        force_style = (
+            "Fontname=Arial,Fontsize=22,"
+            "PrimaryColour=&H0000FFFF,"
+            "OutlineColour=&H00000000,"
+            "Outline=2,Shadow=0,"
+            "Alignment=2,MarginV=30"
+        )
+        vf_filter = f"subtitles={subtitle_path}:force_style='{force_style}'"
 
     # Burn subtitles using ffmpeg
     try:
@@ -167,3 +176,65 @@ def trim_video(
         raise FFmpegError(f"Failed to trim video: {error_message}") from e
 
     return output_path
+
+
+def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
+    """Extract video metadata using ffprobe.
+
+    Args:
+        video_path: Path to the video file
+
+    Returns:
+        Dict with keys: title, duration, width, height, fps
+
+    Raises:
+        FFmpegError: If ffprobe fails or no video stream found
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        str(video_path),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise FFmpegError(f"ffprobe failed for {video_path}: {e}") from e
+
+    data = json.loads(result.stdout)
+
+    # Find video stream
+    video_stream = None
+    for stream in data.get("streams", []):
+        if stream.get("codec_type") == "video":
+            video_stream = stream
+            break
+
+    if not video_stream:
+        raise FFmpegError(f"No video stream found in {video_path}")
+
+    try:
+        title = data.get("format", {}).get("tags", {}).get("title", video_path.stem)
+        duration = float(data.get("format", {}).get("duration", 0))
+        width = int(video_stream.get("width", 0))
+        height = int(video_stream.get("height", 0))
+
+        # Parse FPS from r_frame_rate (e.g., "30/1" or "30000/1001")
+        fps_str = video_stream.get("r_frame_rate", "0/1")
+        num, denom = fps_str.split("/")
+        fps = float(num) / float(denom) if float(denom) > 0 else 0.0
+    except (KeyError, ValueError, ZeroDivisionError) as e:
+        raise FFmpegError(f"Failed to parse metadata: {e}") from e
+
+    return {
+        "title": title,
+        "duration": duration,
+        "width": width,
+        "height": height,
+        "fps": fps,
+    }

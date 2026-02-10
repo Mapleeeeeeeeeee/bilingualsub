@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { JobCreateRequest } from '../types';
+import type { JobCreateRequest, JobUploadRequest } from '../types';
 
 interface UrlInputProps {
-  onSubmit: (request: JobCreateRequest) => void;
+  onSubmit: (request: JobCreateRequest | JobUploadRequest) => void;
   disabled: boolean;
 }
 
@@ -30,7 +30,10 @@ function parseTime(value: string): number | undefined {
 
 export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
   const { t } = useTranslation();
+  const [inputMode, setInputMode] = useState<'url' | 'file'>('url');
   const [url, setUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sourceLang, setSourceLang] = useState('en');
   const [targetLang, setTargetLang] = useState('zh-TW');
   const [startTime, setStartTime] = useState('');
@@ -40,12 +43,6 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    const youtubePattern = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/;
-    if (!youtubePattern.test(url)) {
-      setError(t('error.invalid_url'));
-      return;
-    }
 
     if (!isValidTimeFormat(startTime) || !isValidTimeFormat(endTime)) {
       setError(t('error.invalidTimeFormat'));
@@ -57,6 +54,28 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
 
     if (startSeconds !== undefined && endSeconds !== undefined && startSeconds >= endSeconds) {
       setError(t('error.invalidTimeRange'));
+      return;
+    }
+
+    if (inputMode === 'file') {
+      if (!selectedFile) {
+        setError(t('form.filePlaceholder'));
+        return;
+      }
+      const request: JobUploadRequest = {
+        file: selectedFile,
+        source_lang: sourceLang,
+        target_lang: targetLang,
+      };
+      if (startSeconds !== undefined) request.start_time = startSeconds;
+      if (endSeconds !== undefined) request.end_time = endSeconds;
+      onSubmit(request);
+      return;
+    }
+
+    const youtubePattern = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/;
+    if (!youtubePattern.test(url)) {
+      setError(t('error.invalid_url'));
       return;
     }
 
@@ -73,15 +92,63 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-16">
+      <div className="flex justify-center gap-8 mb-4">
+        <button
+          type="button"
+          onClick={() => setInputMode('url')}
+          className={`text-xs uppercase tracking-widest font-bold pb-1 border-b-2 transition-colors ${
+            inputMode === 'url'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-300 hover:text-gray-500'
+          }`}
+        >
+          {t('form.inputModeUrl')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputMode('file')}
+          className={`text-xs uppercase tracking-widest font-bold pb-1 border-b-2 transition-colors ${
+            inputMode === 'file'
+              ? 'border-black text-black'
+              : 'border-transparent text-gray-300 hover:text-gray-500'
+          }`}
+        >
+          {t('form.inputModeFile')}
+        </button>
+      </div>
+
       <div className="relative group">
-        <input
-          type="url"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          placeholder={t('form.paste_placeholder')}
-          disabled={disabled}
-          className="w-full py-6 bg-transparent border-b-2 border-gray-100 text-3xl md:text-5xl font-serif text-black placeholder-gray-200 focus:outline-none focus:border-black transition-colors text-center"
-        />
+        {inputMode === 'url' ? (
+          <input
+            type="url"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder={t('form.paste_placeholder')}
+            disabled={disabled}
+            className="w-full py-6 bg-transparent border-b-2 border-gray-100 text-3xl md:text-5xl font-serif text-black placeholder-gray-200 focus:outline-none focus:border-black transition-colors text-center"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="video/*,audio/*,.mp4,.avi,.mov,.mkv,.mp3,.wav,.m4a,.webm"
+              onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
+              disabled={disabled}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled}
+              className="w-full py-6 bg-transparent border-b-2 border-gray-100 text-3xl md:text-5xl font-serif text-gray-200 hover:border-black focus:outline-none focus:border-black transition-colors text-center"
+            >
+              {selectedFile
+                ? t('form.fileSelected', { filename: selectedFile.name })
+                : t('form.filePlaceholder')}
+            </button>
+          </div>
+        )}
         {error && (
           <p className="absolute -bottom-8 left-0 w-full text-center text-red-500 text-sm font-medium">
             {error}

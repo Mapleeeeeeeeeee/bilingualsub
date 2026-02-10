@@ -22,7 +22,11 @@
     "startTime": "開始時間",
     "endTime": "結束時間",
     "timePlaceholder": "00:00:00",
-    "timeFormatHint": "格式：HH:MM:SS（選填）"
+    "timeFormatHint": "格式：HH:MM:SS（選填）",
+    "inputModeUrl": "YouTube 網址",
+    "inputModeFile": "上傳檔案",
+    "filePlaceholder": "選擇影片或音訊檔案",
+    "fileSelected": "已選擇：{{filename}}"
   },
   "lang": {
     "en": "英文",
@@ -73,6 +77,10 @@
     "reset": "重置",
     "download": "下載已編輯 SRT",
     "unsavedHint": "您有未儲存的編輯，點擊下載以儲存。",
-    "segments_label": "句段"
+    "segments_label": "句段",
+    "audioHint": "點擊字幕可跳轉播放對應音訊",
+    "videoHint": "點擊字幕可跳轉播放對應位置",
+    "burn": "燒錄字幕",
+    "burning": "燒錄中..."
   }
 }

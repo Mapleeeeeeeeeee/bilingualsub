@@ -22,6 +22,8 @@ class FileType(StrEnum):
     SRT = "srt"
     ASS = "ass"
     VIDEO = "video"
+    AUDIO = "audio"
+    SOURCE_VIDEO = "source_video"
 
 
 class SSEEvent(StrEnum):

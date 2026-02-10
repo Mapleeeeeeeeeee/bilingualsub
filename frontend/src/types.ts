@@ -40,6 +40,14 @@ export interface SSEHandlers {
   onError: (data: { code: string; message: string; detail?: string }) => void;
 }
 
+export interface JobUploadRequest {
+  file: File;
+  source_lang?: string;
+  target_lang?: string;
+  start_time?: number;
+  end_time?: number;
+}
+
 export interface SrtEntry {
   index: number;
   startTime: string; // "HH:MM:SS,mmm"

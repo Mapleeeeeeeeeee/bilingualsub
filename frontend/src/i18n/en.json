@@ -22,7 +22,11 @@
     "startTime": "Start Time",
     "endTime": "End Time",
     "timePlaceholder": "00:00:00",
-    "timeFormatHint": "Format: HH:MM:SS (optional)"
+    "timeFormatHint": "Format: HH:MM:SS (optional)",
+    "inputModeUrl": "YouTube URL",
+    "inputModeFile": "Upload File",
+    "filePlaceholder": "Choose a video or audio file",
+    "fileSelected": "Selected: {{filename}}"
   },
   "lang": {
     "en": "English",
@@ -73,6 +77,10 @@
     "reset": "Reset",
     "download": "Download Edited SRT",
     "unsavedHint": "You have unsaved edits. Click download to save.",
-    "segments_label": "SEGMENTS"
+    "segments_label": "SEGMENTS",
+    "audioHint": "Click on a subtitle entry to jump to the corresponding audio",
+    "videoHint": "Click on a subtitle entry to jump to the corresponding position",
+    "burn": "Burn Subtitles",
+    "burning": "Burning..."
   }
 }

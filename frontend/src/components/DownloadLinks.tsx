@@ -4,6 +4,7 @@ import { apiClient } from '../api/client';
 
 interface DownloadLinksProps {
   jobId: string;
+  showVideo?: boolean;
 }
 
 const FILE_OPTIONS = [
@@ -12,12 +13,15 @@ const FILE_OPTIONS = [
   { type: FileType.VIDEO, labelKey: 'download.video' },
 ] as const;
 
-export function DownloadLinks({ jobId }: DownloadLinksProps) {
+export function DownloadLinks({ jobId, showVideo }: DownloadLinksProps) {
   const { t } = useTranslation();
+
+  const visibleOptions =
+    showVideo === false ? FILE_OPTIONS.filter(opt => opt.type !== FileType.VIDEO) : FILE_OPTIONS;
 
   return (
     <div className="space-y-2">
-      {FILE_OPTIONS.map(({ type, labelKey }) => (
+      {visibleOptions.map(({ type, labelKey }) => (
         <a
           key={type}
           href={apiClient.getDownloadUrl(jobId, type)}

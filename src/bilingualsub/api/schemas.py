@@ -58,6 +58,12 @@ class JobStatusResponse(BaseModel):
     output_files: dict[FileType, str] = {}
 
 
+class BurnRequest(BaseModel):
+    """Request body for on-demand subtitle burn."""
+
+    srt_content: str
+
+
 class SSEProgressData(BaseModel):
     """Payload sent in SSE progress events."""
 

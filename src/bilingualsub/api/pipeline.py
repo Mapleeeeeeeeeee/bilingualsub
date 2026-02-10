@@ -19,15 +19,23 @@ if TYPE_CHECKING:
     from bilingualsub.api.jobs import Job
 from bilingualsub.core import (
     DownloadError,
+    Subtitle,
     TranscriptionError,
     TranslationError,
+    VideoMetadata,
     download_youtube_video,
     merge_subtitles,
     transcribe_audio,
     translate_subtitle,
 )
 from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
-from bilingualsub.utils import FFmpegError, burn_subtitles, extract_audio, trim_video
+from bilingualsub.utils import (
+    FFmpegError,
+    burn_subtitles,
+    extract_audio,
+    extract_video_metadata,
+    trim_video,
+)
 
 logger = structlog.get_logger()
 
@@ -155,12 +163,49 @@ async def _extract_audio_step(
     t0 = time.monotonic()
     audio_path = work_dir / "audio.mp3"
     await asyncio.to_thread(extract_audio, video_path, audio_path)
+    job.output_files[FileType.AUDIO] = audio_path
     log.info(
         "step_done",
         step="extract_audio",
         duration_ms=int((time.monotonic() - t0) * 1000),
     )
     return audio_path
+
+
+async def _acquire_video(
+    job: Job,
+    work_dir: Path,
+    log: structlog.stdlib.BoundLogger,
+) -> tuple[Path, VideoMetadata]:
+    """Download or use local upload, returning video path and metadata."""
+    if job.local_video_path is not None:
+        _send_progress(
+            job, JobStatus.DOWNLOADING, 5.0, "upload", "Processing uploaded file"
+        )
+        video_path = job.local_video_path
+        meta_dict = await asyncio.to_thread(extract_video_metadata, video_path)
+        metadata = VideoMetadata(
+            title=str(meta_dict["title"]),
+            duration=float(meta_dict["duration"]),
+            width=int(meta_dict["width"]),
+            height=int(meta_dict["height"]),
+            fps=float(meta_dict["fps"]),
+        )
+        log.info("step_done", step="upload", source=str(video_path))
+        return video_path, metadata
+
+    _send_progress(job, JobStatus.DOWNLOADING, 0.0, "download", "Downloading video")
+    t0 = time.monotonic()
+    video_path = work_dir / "video.mp4"
+    metadata = await asyncio.to_thread(
+        download_youtube_video, job.youtube_url, video_path
+    )
+    log.info(
+        "step_done",
+        step="download",
+        duration_ms=int((time.monotonic() - t0) * 1000),
+    )
+    return video_path, metadata
 
 
 async def run_pipeline(job: Job) -> None:
@@ -174,18 +219,8 @@ async def run_pipeline(job: Job) -> None:
     work_dir = Path(tempfile.mkdtemp(prefix=f"bilingualsub_{job.id}_"))
 
     try:
-        # --- Step 1: Download ---
-        _send_progress(job, JobStatus.DOWNLOADING, 0.0, "download", "Downloading video")
-        t0 = time.monotonic()
-        video_path = work_dir / "video.mp4"
-        metadata = await asyncio.to_thread(
-            download_youtube_video, job.youtube_url, video_path
-        )
-        log.info(
-            "step_done",
-            step="download",
-            duration_ms=int((time.monotonic() - t0) * 1000),
-        )
+        # --- Step 1: Download or use local file ---
+        video_path, metadata = await _acquire_video(job, work_dir, log)
 
         # --- Step 1.25: Trim video (if time range specified) ---
         video_path = await _trim_if_needed(
@@ -236,11 +271,12 @@ async def run_pipeline(job: Job) -> None:
         )
         t0 = time.monotonic()
 
-        await asyncio.to_thread(
+        merged_entries = await asyncio.to_thread(
             merge_subtitles, original_sub.entries, translated_sub.entries
         )
+        merged_sub = Subtitle(entries=merged_entries)
 
-        srt_content = serialize_srt(original_sub)
+        srt_content = serialize_srt(merged_sub)
         srt_path = work_dir / "subtitle.srt"
         srt_path.write_text(srt_content, encoding="utf-8")
         job.output_files[FileType.SRT] = srt_path
@@ -259,19 +295,8 @@ async def run_pipeline(job: Job) -> None:
             "step_done", step="merge", duration_ms=int((time.monotonic() - t0) * 1000)
         )
 
-        # --- Step 5: Burn subtitles ---
-        _send_progress(
-            job, JobStatus.BURNING, 80.0, "burn", "Burning subtitles into video"
-        )
-        t0 = time.monotonic()
-        output_video = work_dir / "output.mp4"
-        await asyncio.to_thread(burn_subtitles, video_path, ass_path, output_video)
-        job.output_files[FileType.VIDEO] = output_video
-        log.info(
-            "step_done", step="burn", duration_ms=int((time.monotonic() - t0) * 1000)
-        )
-
-        # --- Step 6: Complete ---
+        # --- Step 5: Save source video & complete ---
+        job.output_files[FileType.SOURCE_VIDEO] = video_path
         _send_complete(job)
         log.info("pipeline_complete", job_id=job.id)
 
@@ -287,3 +312,26 @@ async def run_pipeline(job: Job) -> None:
             error_code=pipeline_err.code,
             error=str(exc),
         )
+
+
+async def run_burn(job: Job, srt_content: str) -> None:
+    """Burn user-edited SRT into the source video."""
+    log = logger.bind(job_id=job.id)
+    try:
+        source_video = job.output_files[FileType.SOURCE_VIDEO]
+        work_dir = source_video.parent
+        srt_path = work_dir / "subtitle_edited.srt"
+        srt_path.write_text(srt_content, encoding="utf-8")
+
+        _send_progress(job, JobStatus.BURNING, 50.0, "burn", "Burning subtitles")
+        output_video = work_dir / "output.mp4"
+        await asyncio.to_thread(burn_subtitles, source_video, srt_path, output_video)
+        job.output_files[FileType.VIDEO] = output_video
+        _send_complete(job)
+        log.info("burn_complete", job_id=job.id)
+    except Exception as exc:
+        pipeline_err = _to_pipeline_error(exc)
+        _send_error(
+            job, pipeline_err.code, pipeline_err.message, pipeline_err.detail or ""
+        )
+        log.error("burn_failed", error_code=pipeline_err.code, error=str(exc))

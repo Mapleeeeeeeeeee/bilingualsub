@@ -9,11 +9,13 @@ import { useJob } from './hooks/useJob';
 
 function App() {
   const { t } = useTranslation();
-  const { state, submitJob, reset } = useJob();
+  const { state, submitJob, burnJob, reset } = useJob();
 
   const isIdle = state.phase === 'idle';
   const isProcessing = state.phase === 'submitting' || state.phase === 'processing';
   const isCompleted = state.phase === 'completed' && state.jobId;
+  const isBurning = state.phase === 'burning';
+  const isBurned = state.phase === 'burned' && state.jobId;
   const isFailed = state.phase === 'failed';
 
   return (
@@ -71,8 +73,65 @@ function App() {
           </div>
         )}
 
-        {/* COMPLETED STATE: Cinema Mode */}
+        {/* COMPLETED STATE: Preview-first (no burned video yet) */}
         {isCompleted && (
+          <div className="w-full space-y-16 animate-fade-in-up py-12">
+            {/* Top Bar with Back Button */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={reset}
+                className="flex items-center gap-2 text-gray-400 hover:text-black transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
+                </svg>
+                <span className="text-sm font-medium uppercase tracking-widest">
+                  {t('app.start_over')}
+                </span>
+              </button>
+              <h1 className="text-2xl font-serif">{t('app.title')}</h1>
+              <div className="w-24"></div> {/* Spacer for balance */}
+            </div>
+
+            {/* Downloads (no video yet) */}
+            <div className="max-w-md mx-auto space-y-8">
+              <div>
+                <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
+                <DownloadLinks jobId={state.jobId!} showVideo={false} />
+              </div>
+            </div>
+
+            {/* Editor Section */}
+            <div className="border-t border-gray-100 pt-16">
+              <div className="max-w-3xl mx-auto">
+                <SubtitleEditor jobId={state.jobId!} onBurn={burnJob} isBurning={false} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BURNING STATE: Burn progress */}
+        {isBurning && (
+          <div className="max-w-xl mx-auto w-full space-y-12 text-center animate-fade-in-up">
+            <div className="space-y-4">
+              <h2 className="text-3xl font-serif font-light">{t('app.processing_title')}</h2>
+              <p className="text-gray-400">{t('progress.burning')}</p>
+            </div>
+            <ProgressTracker
+              status={state.status}
+              progress={state.progress}
+              currentStep={state.currentStep}
+            />
+          </div>
+        )}
+
+        {/* BURNED STATE: Video ready + can re-edit */}
+        {isBurned && (
           <div className="w-full space-y-16 animate-fade-in-up py-12">
             {/* Top Bar with Back Button */}
             <div className="flex items-center justify-between">
@@ -106,7 +165,7 @@ function App() {
               <div className="lg:col-span-1 space-y-8">
                 <div>
                   <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
-                  <DownloadLinks jobId={state.jobId!} />
+                  <DownloadLinks jobId={state.jobId!} showVideo={true} />
                 </div>
                 <div className="p-6 bg-gray-50 rounded-3xl">
                   <p className="text-sm text-gray-500 leading-relaxed">{t('app.downloads_desc')}</p>
@@ -114,10 +173,10 @@ function App() {
               </div>
             </div>
 
-            {/* Editor Section */}
+            {/* Editor Section (can re-edit and re-burn) */}
             <div className="border-t border-gray-100 pt-16">
               <div className="max-w-3xl mx-auto">
-                <SubtitleEditor jobId={state.jobId!} />
+                <SubtitleEditor jobId={state.jobId!} onBurn={burnJob} isBurning={false} />
               </div>
             </div>
           </div>

@@ -1,5 +1,11 @@
 import { FileType } from '../constants';
-import type { JobCreateRequest, JobCreateResponse, JobStatusResponse, SSEHandlers } from '../types';
+import type {
+  JobCreateRequest,
+  JobCreateResponse,
+  JobStatusResponse,
+  JobUploadRequest,
+  SSEHandlers,
+} from '../types';
 import { ApiError } from './errors';
 
 class ApiClient {
@@ -14,6 +20,24 @@ class ApiClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.json();
+  }
+
+  async createJobFromUpload(request: JobUploadRequest): Promise<JobCreateResponse> {
+    const formData = new FormData();
+    formData.append('file', request.file);
+    if (request.source_lang) formData.append('source_lang', request.source_lang);
+    if (request.target_lang) formData.append('target_lang', request.target_lang);
+    if (request.start_time !== undefined) formData.append('start_time', String(request.start_time));
+    if (request.end_time !== undefined) formData.append('end_time', String(request.end_time));
+
+    const response = await fetch(`${this.baseUrl}/api/jobs/upload`, {
+      method: 'POST',
+      body: formData,
     });
     if (!response.ok) {
       throw await ApiError.fromResponse(response);
@@ -67,6 +91,16 @@ class ApiClient {
       throw await ApiError.fromResponse(response);
     }
     return response.text();
+  }
+
+  async burnJob(jobId: string, srtContent: string): Promise<{ status: string }> {
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/burn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ srt_content: srtContent }),
+    });
+    if (!response.ok) throw await ApiError.fromResponse(response);
+    return response.json();
   }
 
   getDownloadUrl(jobId: string, fileType: FileType): string {

@@ -5,6 +5,7 @@ from bilingualsub.utils.ffmpeg import (
     FFmpegError,
     burn_subtitles,
     extract_audio,
+    extract_video_metadata,
     trim_video,
 )
 
@@ -13,6 +14,7 @@ __all__ = [
     "Settings",
     "burn_subtitles",
     "extract_audio",
+    "extract_video_metadata",
     "get_groq_api_key",
     "get_settings",
     "trim_video",

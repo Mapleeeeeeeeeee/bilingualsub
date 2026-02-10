@@ -14,6 +14,8 @@ export const FileType = {
   SRT: 'srt',
   ASS: 'ass',
   VIDEO: 'video',
+  AUDIO: 'audio',
+  SOURCE_VIDEO: 'source_video',
 } as const;
 export type FileType = (typeof FileType)[keyof typeof FileType];
 
@@ -30,5 +32,4 @@ export const PIPELINE_STEPS = [
   JobStatus.TRANSCRIBING,
   JobStatus.TRANSLATING,
   JobStatus.MERGING,
-  JobStatus.BURNING,
 ] as const;

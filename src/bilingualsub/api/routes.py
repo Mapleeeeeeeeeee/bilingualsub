@@ -4,17 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING
+import tempfile
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request, UploadFile
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
-from bilingualsub.api.constants import SSE_KEEPALIVE_SECONDS, FileType, SSEEvent
+from bilingualsub.api.constants import (
+    SSE_KEEPALIVE_SECONDS,
+    FileType,
+    JobStatus,
+    SSEEvent,
+)
 from bilingualsub.api.errors import InvalidRequestError, JobNotFoundError
-from bilingualsub.api.pipeline import run_pipeline
+from bilingualsub.api.pipeline import run_burn, run_pipeline
 from bilingualsub.api.schemas import (
+    BurnRequest,
     ErrorDetail,
     JobCreateRequest,
     JobCreateResponse,
@@ -28,6 +36,17 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/api")
 logger = structlog.get_logger()
+
+_ALLOWED_UPLOAD_EXTENSIONS = {
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".webm",
+}
 
 
 def _get_job_manager(request: Request) -> JobManager:
@@ -44,6 +63,16 @@ def _get_job_or_404(request: Request, job_id: str) -> Job:
     return job
 
 
+def _start_background_task(request: Request, coro: Any) -> None:
+    """Start a coroutine as a background task, preventing GC."""
+    request.app.state._background_tasks = getattr(
+        request.app.state, "_background_tasks", set()
+    )
+    task = asyncio.create_task(coro)
+    request.app.state._background_tasks.add(task)
+    task.add_done_callback(request.app.state._background_tasks.discard)
+
+
 @router.post("/jobs", response_model=JobCreateResponse)
 async def create_job(body: JobCreateRequest, request: Request) -> JobCreateResponse:
     """Create a new subtitle generation job."""
@@ -55,13 +84,59 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
         start_time=body.start_time,
         end_time=body.end_time,
     )
-    # Start pipeline in background; store ref to prevent GC
-    request.app.state._background_tasks = getattr(
-        request.app.state, "_background_tasks", set()
+    _start_background_task(request, run_pipeline(job))
+    return JobCreateResponse(job_id=job.id)
+
+
+@router.post("/jobs/upload", response_model=JobCreateResponse)
+async def create_job_from_upload(
+    file: UploadFile,
+    source_lang: str = Form("en"),
+    target_lang: str = Form("zh-TW"),
+    start_time: float | None = Form(None),
+    end_time: float | None = Form(None),
+    *,
+    request: Request,
+) -> JobCreateResponse:
+    """Create a subtitle generation job from an uploaded file."""
+    # Validate file extension
+    filename = file.filename or ""
+    suffix = Path(filename).suffix.lower()
+    if suffix not in _ALLOWED_UPLOAD_EXTENSIONS:
+        raise InvalidRequestError(
+            f"Unsupported file type: {suffix}",
+            detail=f"Allowed: {', '.join(sorted(_ALLOWED_UPLOAD_EXTENSIONS))}",
+        )
+
+    # Sanitize filename to prevent path traversal
+    safe_name = Path(filename).name or f"upload{suffix}"
+
+    # Save uploaded file to temp directory with size limit
+    max_size = 500 * 1024 * 1024  # 500 MB
+    tmp_dir = Path(tempfile.mkdtemp(prefix="bilingualsub_upload_"))
+    saved_path = tmp_dir / safe_name
+    bytes_written = 0
+    with saved_path.open("wb") as buf:
+        while chunk := await file.read(1024 * 1024):
+            bytes_written += len(chunk)
+            if bytes_written > max_size:
+                saved_path.unlink(missing_ok=True)
+                tmp_dir.rmdir()
+                raise InvalidRequestError(
+                    "File too large",
+                    detail="Maximum file size is 500 MB",
+                )
+            buf.write(chunk)
+
+    manager = _get_job_manager(request)
+    job = manager.create_job(
+        source_lang=source_lang,
+        target_lang=target_lang,
+        start_time=start_time,
+        end_time=end_time,
+        local_video_path=saved_path,
     )
-    task = asyncio.create_task(run_pipeline(job))
-    request.app.state._background_tasks.add(task)
-    task.add_done_callback(request.app.state._background_tasks.discard)
+    _start_background_task(request, run_pipeline(job))
     return JobCreateResponse(job_id=job.id)
 
 
@@ -136,17 +211,37 @@ async def download_file(job_id: str, file_type: str, request: Request) -> FileRe
         FileType.SRT: "text/plain",
         FileType.ASS: "text/plain",
         FileType.VIDEO: "video/mp4",
+        FileType.AUDIO: "audio/mpeg",
+        FileType.SOURCE_VIDEO: "video/mp4",
     }
     extensions = {
         FileType.SRT: "srt",
         FileType.ASS: "ass",
         FileType.VIDEO: "mp4",
+        FileType.AUDIO: "mp3",
+        FileType.SOURCE_VIDEO: "mp4",
     }
     return FileResponse(
         path=path,
         media_type=media_types[ft],
         filename=f"bilingualsub.{extensions[ft]}",
     )
+
+
+@router.post("/jobs/{job_id}/burn")
+async def burn_job(job_id: str, body: BurnRequest, request: Request) -> dict[str, str]:
+    """Burn user-edited subtitles into the source video."""
+    job = _get_job_or_404(request, job_id)
+    if FileType.SOURCE_VIDEO not in job.output_files:
+        raise InvalidRequestError("Pipeline not complete")
+    if job.status == JobStatus.BURNING:
+        raise InvalidRequestError("Burn already in progress")
+
+    job.status = JobStatus.BURNING
+    job.progress = 0.0
+    job.event_queue = asyncio.Queue()
+    _start_background_task(request, run_burn(job, body.srt_content))
+    return {"status": "burning"}
 
 
 @router.get("/health")
