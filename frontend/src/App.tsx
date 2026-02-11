@@ -87,6 +87,13 @@ function App() {
                 >
                   {t('app.download_original_video')}
                 </a>
+                <a
+                  href={apiClient.getDownloadUrl(state.jobId!, FileType.AUDIO)}
+                  download
+                  className="text-sm text-gray-400 hover:text-black transition-colors"
+                >
+                  {t('app.download_audio')}
+                </a>
                 <button
                   onClick={reset}
                   className="text-sm text-gray-400 hover:text-black transition-colors"

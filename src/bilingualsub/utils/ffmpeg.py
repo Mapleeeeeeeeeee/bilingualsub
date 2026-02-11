@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import ffmpeg
@@ -15,6 +16,8 @@ def burn_subtitles(
     video_path: Path,
     subtitle_path: Path,
     output_path: Path,
+    *,
+    on_progress: Callable[[float], None] | None = None,
 ) -> Path:
     """Burn subtitles into video.
 
@@ -22,6 +25,7 @@ def burn_subtitles(
         video_path: Input video file
         subtitle_path: Subtitle file (.srt or .ass)
         output_path: Output video file
+        on_progress: Optional callback for progress updates (0-100)
 
     Returns:
         Path to output video file
@@ -57,7 +61,7 @@ def burn_subtitles(
     else:
         # Use subtitles filter for SRT subtitles with yellow text + black outline
         force_style = (
-            "Fontname=Arial,Fontsize=22,"
+            "Fontname=Arial,Fontsize=16,"
             "PrimaryColour=&H0000FFFF,"
             "OutlineColour=&H00000000,"
             "Outline=2,Shadow=0,"
@@ -65,24 +69,61 @@ def burn_subtitles(
         )
         vf_filter = f"subtitles={subtitle_path}:force_style='{force_style}'"
 
-    # Burn subtitles using ffmpeg
+    # Get video duration for progress calculation
+    metadata = extract_video_metadata(video_path)
+    total_duration = float(metadata["duration"])
+
+    # Build ffmpeg command with VideoToolbox hardware acceleration
+    cmd = [
+        "ffmpeg",
+        "-i",
+        str(video_path),
+        "-vf",
+        vf_filter,
+        "-c:v",
+        "h264_videotoolbox",
+        "-b:v",
+        "8M",
+        "-c:a",
+        "copy",
+        "-progress",
+        "pipe:1",
+        "-y",
+        str(output_path),
+    ]
+
     try:
-        (
-            ffmpeg.input(str(video_path))
-            .output(str(output_path), vf=vf_filter, acodec="copy")
-            .overwrite_output()
-            .run(capture_stdout=True, capture_stderr=True)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-    except Exception as e:
-        # Catch all exceptions from ffmpeg (ffmpeg.Error or any other error)
-        if hasattr(e, "stderr") and e.stderr:
-            stderr = e.stderr
-            error_message = (
-                stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+
+        if process.stdout and on_progress and total_duration > 0:
+            for line in process.stdout:
+                decoded = line.decode("utf-8", errors="replace").strip()
+                if decoded.startswith("out_time_us="):
+                    try:
+                        time_us = int(decoded.split("=")[1])
+                        progress = min(
+                            time_us / (total_duration * 1_000_000) * 100, 99.0
+                        )
+                        on_progress(progress)
+                    except (ValueError, IndexError):
+                        pass
+
+        returncode = process.wait()
+        if returncode != 0:
+            stderr_output = (
+                process.stderr.read().decode("utf-8", errors="replace")
+                if process.stderr
+                else ""
             )
-        else:
-            error_message = str(e)
-        raise FFmpegError(f"Failed to burn subtitles: {error_message}") from e
+            raise FFmpegError(f"Failed to burn subtitles: {stderr_output}")
+    except FFmpegError:
+        raise
+    except Exception as e:
+        raise FFmpegError(f"Failed to burn subtitles: {e}") from e
 
     return output_path
 

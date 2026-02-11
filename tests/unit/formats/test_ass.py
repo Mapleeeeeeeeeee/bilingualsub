@@ -49,8 +49,8 @@ class TestSerializeBilingualASS:
         assert "Style: Original" in result
         assert "&H0000FFFF" in result  # Yellow color
         assert "&H00000000" in result  # Black outline
-        assert ",2,0,2,10,10,140," in result  # Translated MarginV=140
-        assert ",2,0,2,10,10,60," in result  # Original MarginV=60
+        assert ",2,0,2,30,30,60," in result  # Translated MarginV=60
+        assert ",2,0,2,30,30,20," in result  # Original MarginV=20
 
         # Check dialogue lines
         assert (

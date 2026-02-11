@@ -125,6 +125,22 @@ def _make_translate_progress_cb(job: Job) -> Callable[[int, int], None]:
     return _on_progress
 
 
+def _make_rate_limit_cb(job: Job) -> Callable[[float, int, int], None]:
+    """Create a callback for rate limit notifications."""
+
+    def _on_rate_limit(retry_after: float, attempt: int, max_retries: int) -> None:
+        _send_progress(
+            job,
+            JobStatus.TRANSLATING,
+            job.progress,
+            "translate",
+            f"API rate limited, retrying in {retry_after:.0f}s "
+            f"(attempt {attempt}/{max_retries})",
+        )
+
+    return _on_rate_limit
+
+
 async def _trim_if_needed(
     job: Job,
     video_path: Path,
@@ -304,12 +320,14 @@ async def run_subtitle(job: Job) -> None:
         )
         t0 = time.monotonic()
         _on_translate_progress = _make_translate_progress_cb(job)
+        _on_rate_limit = _make_rate_limit_cb(job)
         translated_sub = await asyncio.to_thread(
             translate_subtitle,
             original_sub,
             source_lang=job.source_lang,
             target_lang=job.target_lang,
             on_progress=_on_translate_progress,
+            on_rate_limit=_on_rate_limit,
         )
         log.info(
             "step_done",
@@ -406,6 +424,7 @@ async def run_pipeline(job: Job) -> None:
         t0 = time.monotonic()
 
         _on_translate_progress = _make_translate_progress_cb(job)
+        _on_rate_limit = _make_rate_limit_cb(job)
 
         translated_sub = await asyncio.to_thread(
             translate_subtitle,
@@ -413,6 +432,7 @@ async def run_pipeline(job: Job) -> None:
             source_lang=job.source_lang,
             target_lang=job.target_lang,
             on_progress=_on_translate_progress,
+            on_rate_limit=_on_rate_limit,
         )
         log.info(
             "step_done",
@@ -478,9 +498,25 @@ async def run_burn(job: Job, srt_content: str) -> None:
         srt_path = work_dir / "subtitle_edited.srt"
         srt_path.write_text(srt_content, encoding="utf-8")
 
-        _send_progress(job, JobStatus.BURNING, 50.0, "burn", "Burning subtitles")
+        _send_progress(job, JobStatus.BURNING, 0.0, "burn", "Burning subtitles")
         output_video = work_dir / "output.mp4"
-        await asyncio.to_thread(burn_subtitles, source_video, srt_path, output_video)
+
+        def on_burn_progress(percent: float) -> None:
+            _send_progress(
+                job,
+                JobStatus.BURNING,
+                percent,
+                "burn",
+                f"Burning subtitles ({percent:.0f}%)",
+            )
+
+        await asyncio.to_thread(
+            burn_subtitles,
+            source_video,
+            srt_path,
+            output_video,
+            on_progress=on_burn_progress,
+        )
         job.output_files[FileType.VIDEO] = output_video
         _send_complete(job)
         log.info("burn_complete", job_id=job.id)

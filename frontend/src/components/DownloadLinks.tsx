@@ -14,6 +14,7 @@ const FILE_OPTIONS = [
   { type: FileType.SRT, labelKey: 'download.srt' },
   { type: FileType.ASS, labelKey: 'download.ass' },
   { type: FileType.VIDEO, labelKey: 'download.video' },
+  { type: FileType.AUDIO, labelKey: 'download.audio' },
 ] as const;
 
 export function DownloadLinks({ jobId, showVideo }: DownloadLinksProps) {

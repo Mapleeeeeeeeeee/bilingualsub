@@ -141,7 +141,10 @@ def _download_video(
     if has_ffmpeg:
         # High quality format (requires FFmpeg for merging)
         ydl_opts = {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "format": (
+                "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]"
+                "/best[height<=1080][ext=mp4]/best"
+            ),
             "outtmpl": str(output_path.with_suffix("")),  # yt-dlp adds extension
             "merge_output_format": "mp4",
             "quiet": True,

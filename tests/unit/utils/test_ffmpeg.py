@@ -20,15 +20,31 @@ class TestBurnSubtitles:
 
     @pytest.fixture
     def mock_ffmpeg(self):
-        """Mock ffmpeg module."""
-        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock:
-            # Set up mock chain for ffmpeg.input().output().overwrite_output().run()
-            mock_stream = MagicMock()
-            mock.input.return_value = mock_stream
-            mock_stream.output.return_value = mock_stream
-            mock_stream.overwrite_output.return_value = mock_stream
-            mock_stream.run.return_value = None
-            yield mock
+        """Mock subprocess.Popen and extract_video_metadata for burn_subtitles."""
+        with (
+            patch("bilingualsub.utils.ffmpeg.subprocess.Popen") as mock_popen,
+            patch(
+                "bilingualsub.utils.ffmpeg.extract_video_metadata"
+            ) as mock_extract_metadata,
+        ):
+            # Mock process object
+            mock_process = MagicMock()
+            mock_process.stdout = []  # Empty stdout by default (no progress lines)
+            mock_process.stderr = MagicMock()
+            mock_process.stderr.read.return_value = b""
+            mock_process.wait.return_value = 0  # Success
+            mock_popen.return_value = mock_process
+
+            # Mock metadata with duration
+            mock_extract_metadata.return_value = {
+                "duration": 10.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+                "title": "test video",
+            }
+
+            yield {"popen": mock_popen, "extract_metadata": mock_extract_metadata}
 
     @pytest.mark.parametrize(
         ("subtitle_format", "expected_filter"),
@@ -37,6 +53,7 @@ class TestBurnSubtitles:
             (".ass", "ass="),
         ],
     )
+    @pytest.mark.unit
     def test_when_given_valid_paths_then_burns_subtitles_with_correct_filter(
         self, tmp_path, mock_ffmpeg, subtitle_format, expected_filter
     ):
@@ -53,29 +70,42 @@ class TestBurnSubtitles:
         # Burn subtitles
         result = burn_subtitles(video_path, subtitle_path, output_path)
 
-        # Verify ffmpeg was called correctly
-        mock_ffmpeg.input.assert_called_once_with(str(video_path))
+        # Verify subprocess.Popen was called
+        mock_popen = mock_ffmpeg["popen"]
+        mock_popen.assert_called_once()
 
-        # Verify output was called with correct filter
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert expected_filter in call_kwargs["vf"]
-        assert str(subtitle_path) in call_kwargs["vf"]
-        assert call_kwargs["acodec"] == "copy"
+        # Get the command passed to Popen
+        cmd = mock_popen.call_args[0][0]
 
-        # Verify overwrite_output was called
-        overwrite_mock = (
-            mock_ffmpeg.input.return_value.output.return_value.overwrite_output
-        )
-        overwrite_mock.assert_called_once()
+        # Verify command structure
+        assert cmd[0] == "ffmpeg"
+        assert "-i" in cmd
+        assert str(video_path) in cmd
+        assert "-vf" in cmd
 
-        # Verify run was called with capture flags
-        run_call_kwargs = overwrite_mock.return_value.run.call_args[1]
-        assert run_call_kwargs["capture_stdout"] is True
-        assert run_call_kwargs["capture_stderr"] is True
+        # Find the filter value
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert expected_filter in vf_filter
+        assert str(subtitle_path) in vf_filter
+
+        # Verify VideoToolbox encoding
+        assert "-c:v" in cmd
+        c_v_idx = cmd.index("-c:v")
+        assert cmd[c_v_idx + 1] == "h264_videotoolbox"
+
+        # Verify audio copy
+        assert "-c:a" in cmd
+        c_a_idx = cmd.index("-c:a")
+        assert cmd[c_a_idx + 1] == "copy"
+
+        # Verify progress output
+        assert "-progress" in cmd
 
         # Verify result
         assert result == output_path
 
+    @pytest.mark.unit
     def test_when_given_uppercase_srt_extension_then_burns_subtitles_successfully(
         self, tmp_path, mock_ffmpeg
     ):
@@ -91,10 +121,14 @@ class TestBurnSubtitles:
         result = burn_subtitles(video_path, subtitle_path, output_path)
 
         # Verify subtitles filter was used (SRT format)
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert "subtitles=" in call_kwargs["vf"]
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert "subtitles=" in vf_filter
         assert result == output_path
 
+    @pytest.mark.unit
     def test_when_given_uppercase_ass_extension_then_burns_subtitles_successfully(
         self, tmp_path, mock_ffmpeg
     ):
@@ -110,10 +144,14 @@ class TestBurnSubtitles:
         result = burn_subtitles(video_path, subtitle_path, output_path)
 
         # Verify ass filter was used
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert "ass=" in call_kwargs["vf"]
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert "ass=" in vf_filter
         assert result == output_path
 
+    @pytest.mark.unit
     def test_when_video_does_not_exist_then_raises_value_error(self, tmp_path):
         """Given non-existent video, when burning, then raises error."""
         video_path = tmp_path / "nonexistent.mp4"
@@ -124,9 +162,8 @@ class TestBurnSubtitles:
         with pytest.raises(ValueError, match="Video file does not exist"):
             burn_subtitles(video_path, subtitle_path, output_path)
 
-    def test_when_video_path_is_directory_then_raises_value_error(
-        self, tmp_path, mock_ffmpeg
-    ):
+    @pytest.mark.unit
+    def test_when_video_path_is_directory_then_raises_value_error(self, tmp_path):
         """Given video is a directory, when burning, then raises error."""
         video_dir = tmp_path / "video_dir"
         video_dir.mkdir()
@@ -139,6 +176,7 @@ class TestBurnSubtitles:
         with pytest.raises(ValueError, match="Video path is not a file"):
             burn_subtitles(video_dir, subtitle_path, output_path)
 
+    @pytest.mark.unit
     def test_when_subtitle_does_not_exist_then_raises_value_error(self, tmp_path):
         """Given non-existent subtitle, when burning, then raises error."""
         video_path = tmp_path / "video.mp4"
@@ -150,6 +188,7 @@ class TestBurnSubtitles:
         with pytest.raises(ValueError, match="Subtitle file does not exist"):
             burn_subtitles(video_path, subtitle_path, output_path)
 
+    @pytest.mark.unit
     def test_when_subtitle_path_is_directory_then_raises_value_error(self, tmp_path):
         """Given subtitle is a directory, when burning, then raises error."""
         video_path = tmp_path / "video.mp4"
@@ -163,6 +202,7 @@ class TestBurnSubtitles:
         with pytest.raises(ValueError, match="Subtitle path is not a file"):
             burn_subtitles(video_path, subtitle_dir, output_path)
 
+    @pytest.mark.unit
     def test_when_given_unsupported_subtitle_format_then_raises_value_error(
         self, tmp_path
     ):
@@ -181,6 +221,7 @@ class TestBurnSubtitles:
         ):
             burn_subtitles(video_path, subtitle_path, output_path)
 
+    @pytest.mark.unit
     def test_when_ffmpeg_fails_then_raises_ffmpeg_error(self, tmp_path, mock_ffmpeg):
         """Given ffmpeg fails, when burning, then raises FFmpegError."""
         video_path = tmp_path / "video.mp4"
@@ -192,17 +233,17 @@ class TestBurnSubtitles:
         output_path = tmp_path / "output.mp4"
 
         # Mock ffmpeg error with stderr
-        error = Exception("ffmpeg error")
-        error.stderr = b"Codec not found"  # type: ignore[attr-defined]
-        mock_output = mock_ffmpeg.input.return_value.output.return_value
-        mock_chain = mock_output.overwrite_output.return_value
-        mock_chain.run.side_effect = error
+        mock_popen = mock_ffmpeg["popen"]
+        mock_process = mock_popen.return_value
+        mock_process.wait.return_value = 1  # Non-zero exit code
+        mock_process.stderr.read.return_value = b"Codec not found"
 
         with pytest.raises(
             FFmpegError, match=r"Failed to burn subtitles.*Codec not found"
         ):
             burn_subtitles(video_path, subtitle_path, output_path)
 
+    @pytest.mark.unit
     def test_when_ffmpeg_fails_with_no_stderr_then_raises_ffmpeg_error(
         self, tmp_path, mock_ffmpeg
     ):
@@ -216,20 +257,19 @@ class TestBurnSubtitles:
         output_path = tmp_path / "output.mp4"
 
         # Mock ffmpeg error without stderr
-        error = Exception("Generic ffmpeg error")
-        mock_output = mock_ffmpeg.input.return_value.output.return_value
-        mock_chain = mock_output.overwrite_output.return_value
-        mock_chain.run.side_effect = error
+        mock_popen = mock_ffmpeg["popen"]
+        mock_process = mock_popen.return_value
+        mock_process.wait.return_value = 1  # Non-zero exit code
+        mock_process.stderr.read.return_value = b""
 
-        with pytest.raises(
-            FFmpegError, match=r"Failed to burn subtitles.*Generic ffmpeg error"
-        ):
+        with pytest.raises(FFmpegError, match=r"Failed to burn subtitles"):
             burn_subtitles(video_path, subtitle_path, output_path)
 
     @pytest.mark.parametrize(
         "subtitle_format",
         [".vtt", ".sub", ".sbv", ".json"],
     )
+    @pytest.mark.unit
     def test_when_given_other_unsupported_formats_then_raises_value_error(
         self, tmp_path, subtitle_format
     ):
@@ -261,11 +301,15 @@ class TestBurnSubtitles:
         burn_subtitles(video_path, subtitle_path, output_path)
 
         # Verify ass filter was used (preserves styling)
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert "ass=" in call_kwargs["vf"]
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert "ass=" in vf_filter
         # Verify subtitles filter was NOT used
-        assert call_kwargs["vf"].startswith("ass=")
+        assert vf_filter.startswith("ass=")
 
+    @pytest.mark.unit
     def test_when_given_paths_with_spaces_then_handles_correctly(
         self, tmp_path, mock_ffmpeg
     ):
@@ -281,9 +325,12 @@ class TestBurnSubtitles:
         result = burn_subtitles(video_path, subtitle_path, output_path)
 
         # Verify paths were passed correctly
-        mock_ffmpeg.input.assert_called_once_with(str(video_path))
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert str(subtitle_path) in call_kwargs["vf"]
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+        assert str(video_path) in cmd
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert str(subtitle_path) in vf_filter
         assert result == output_path
 
     @pytest.mark.unit
@@ -304,9 +351,57 @@ class TestBurnSubtitles:
         result = burn_subtitles(video_path, subtitle_path, output_path)
 
         # Verify paths were passed correctly
-        mock_ffmpeg.input.assert_called_once_with(str(video_path))
-        call_kwargs = mock_ffmpeg.input.return_value.output.call_args[1]
-        assert str(subtitle_path) in call_kwargs["vf"]
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+        assert str(video_path) in cmd
+        vf_idx = cmd.index("-vf")
+        vf_filter = cmd[vf_idx + 1]
+        assert str(subtitle_path) in vf_filter
+        assert result == output_path
+
+    @pytest.mark.unit
+    def test_on_progress_called_during_burn(self, tmp_path, mock_ffmpeg):
+        """on_progress should be called with percentage during burn."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video")
+
+        subtitle_path = tmp_path / "subtitle.srt"
+        subtitle_path.write_bytes(b"fake subtitle")
+
+        output_path = tmp_path / "output.mp4"
+
+        # Mock metadata with 10 second duration
+        mock_ffmpeg["extract_metadata"].return_value = {
+            "duration": 10.0,
+            "width": 1920,
+            "height": 1080,
+            "fps": 30.0,
+            "title": "test",
+        }
+
+        # Mock stdout with progress lines (5 seconds processed out of 10)
+        mock_popen = mock_ffmpeg["popen"]
+        mock_process = mock_popen.return_value
+        mock_process.stdout = [
+            b"frame=150\n",
+            b"out_time_us=5000000\n",  # 5 seconds in microseconds
+            b"progress=continue\n",
+        ]
+
+        # Track progress callback calls
+        progress_calls = []
+
+        def on_progress(percentage: float) -> None:
+            progress_calls.append(percentage)
+
+        result = burn_subtitles(
+            video_path, subtitle_path, output_path, on_progress=on_progress
+        )
+
+        # Verify on_progress was called
+        assert len(progress_calls) > 0
+        # Progress should be ~50% (5 seconds out of 10)
+        assert 49.0 <= progress_calls[0] <= 51.0
         assert result == output_path
 
 

@@ -13,7 +13,8 @@
     "download_complete_desc": "Video downloaded successfully. Ready to generate subtitles.",
     "generate_subtitles": "Generate Subtitles",
     "subtitling_desc": "Please wait while we generate subtitles.",
-    "download_original_video": "Download Original Video"
+    "download_original_video": "Download Original Video",
+    "download_audio": "Download Audio"
   },
   "form": {
     "url_placeholder": "Paste YouTube video URL",
@@ -54,7 +55,8 @@
     "title": "Download Results",
     "srt": "Download SRT Subtitle",
     "ass": "Download ASS Subtitle",
-    "video": "Download Burned Video"
+    "video": "Download Burned Video",
+    "audio": "Download Audio"
   },
   "preview": {
     "title": "Video Preview",

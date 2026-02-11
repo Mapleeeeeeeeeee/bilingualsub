@@ -13,7 +13,8 @@
     "download_complete_desc": "影片已下載完成，準備好產生字幕。",
     "generate_subtitles": "產生字幕",
     "subtitling_desc": "請稍候，我們正在產生字幕。",
-    "download_original_video": "下載原始影片"
+    "download_original_video": "下載原始影片",
+    "download_audio": "下載音訊"
   },
   "form": {
     "url_placeholder": "貼上 YouTube 影片網址",
@@ -54,7 +55,8 @@
     "title": "下載結果",
     "srt": "下載 SRT 字幕",
     "ass": "下載 ASS 字幕",
-    "video": "下載燒錄影片"
+    "video": "下載燒錄影片",
+    "audio": "下載音訊檔"
   },
   "preview": {
     "title": "影片預覽",

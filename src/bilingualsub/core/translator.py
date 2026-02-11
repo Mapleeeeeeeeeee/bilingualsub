@@ -1,6 +1,7 @@
 """LLM-based subtitle translation using Agno."""
 
 import re
+import time
 from collections.abc import Callable
 
 import structlog
@@ -14,10 +15,43 @@ logger = structlog.get_logger()
 _BATCH_SIZE = 10
 _CONTEXT_SIZE = 3  # Number of previous entries to include as context
 _LOOKAHEAD_SIZE = 3  # Number of upcoming entries to include as forward context
+_MAX_RETRIES = 5
 
 
 class TranslationError(Exception):
     """Raised when translation fails."""
+
+
+class RateLimitError(TranslationError):
+    """Raised when API rate limit is hit."""
+
+    def __init__(self, retry_after: float, message: str = "") -> None:
+        self.retry_after = retry_after
+        super().__init__(message or f"Rate limited, retry after {retry_after:.0f}s")
+
+
+def _check_rate_limit(response_text: str) -> None:
+    """Raise RateLimitError if response contains rate limit error.
+
+    Args:
+        response_text: Raw response text from LLM
+
+    Raises:
+        RateLimitError: If rate limit detected, with parsed retry_after seconds
+    """
+    if "rate_limit_exceeded" not in response_text:
+        return
+
+    # Parse "Please try again in 4m25.248s" or "1m6.095s"
+    match = re.search(r"try again in (?:(\d+)m)?(\d+(?:\.\d+)?)s", response_text)
+    if match:
+        minutes = int(match.group(1) or 0)
+        seconds = float(match.group(2))
+        retry_after = minutes * 60 + seconds
+    else:
+        retry_after = 60.0  # Default fallback
+
+    raise RateLimitError(retry_after=retry_after, message=response_text)
 
 
 def _parse_batch_response(response_text: str, expected_count: int) -> list[str]:
@@ -115,6 +149,8 @@ def _translate_batch(
     if not response_text:
         raise TranslationError("Empty batch translation response")
 
+    _check_rate_limit(response_text)
+
     logger.debug(
         "Batch translation response (entries %d-%d):\n%s",
         batch[0].index,
@@ -151,6 +187,7 @@ def _translate_one_by_one(
             f"將這段字幕從{source_lang}翻譯成{target_lang}：{entry.text}"  # noqa: RUF001
         )
         translated_text = response.content.strip() if response.content else ""
+        _check_rate_limit(translated_text)
         if not translated_text:
             raise TranslationError(
                 f"Empty or whitespace-only translation for entry "
@@ -172,6 +209,7 @@ def translate_subtitle(
     source_lang: str = "en",
     target_lang: str = "zh-TW",
     on_progress: Callable[[int, int], None] | None = None,
+    on_rate_limit: Callable[[float, int, int], None] | None = None,
 ) -> Subtitle:
     """Translate all entries in a subtitle using LLM.
 
@@ -184,6 +222,8 @@ def translate_subtitle(
         target_lang: Target language code (default: "zh-TW")
         on_progress: Optional callback for progress updates. Called with
             (completed_count, total_count) after each batch.
+        on_rate_limit: Optional callback when rate limited. Called with
+            (retry_after_seconds, attempt, max_retries).
 
     Returns:
         New Subtitle object with translated text
@@ -233,42 +273,65 @@ def translate_subtitle(
             else None
         )
 
-        try:
-            batch_translations = _translate_batch(
-                translator,
-                batch,
-                source_lang,
-                target_lang,
-                context=context,
-                lookahead=lookahead,
-            )
-            translated_texts.extend(batch_translations)
-            if on_progress is not None:
-                on_progress(len(translated_texts), len(entries))
-        except (TranslationError, Exception) as exc:
-            logger.warning(
-                "Batch translation failed for entries %d-%d, falling back to "
-                "one-by-one: %s",
-                i + 1,
-                i + len(batch),
-                exc,
-            )
-            logger.debug(
-                "Falling back to one-by-one for entries %d-%d", i + 1, i + len(batch)
-            )
+        for attempt in range(_MAX_RETRIES + 1):
             try:
-                fallback_translations = _translate_one_by_one(
-                    translator, batch, source_lang, target_lang
-                )
-                translated_texts.extend(fallback_translations)
+                # Try batch translation first
+                try:
+                    batch_translations = _translate_batch(
+                        translator,
+                        batch,
+                        source_lang,
+                        target_lang,
+                        context=context,
+                        lookahead=lookahead,
+                    )
+                except RateLimitError:
+                    raise  # Don't fallback on rate limit
+                except (TranslationError, Exception) as exc:
+                    # Fallback to one-by-one for non-rate-limit errors
+                    logger.warning(
+                        "Batch translation failed for entries %d-%d, "
+                        "falling back to one-by-one: %s",
+                        i + 1,
+                        i + len(batch),
+                        exc,
+                    )
+                    logger.debug(
+                        "Falling back to one-by-one for entries %d-%d",
+                        i + 1,
+                        i + len(batch),
+                    )
+                    batch_translations = _translate_one_by_one(
+                        translator, batch, source_lang, target_lang
+                    )
+
+                translated_texts.extend(batch_translations)
                 if on_progress is not None:
                     on_progress(len(translated_texts), len(entries))
-            except TranslationError:
-                raise
-            except Exception as e:
-                raise TranslationError(
-                    f"Failed to translate entries {i + 1}-{i + len(batch)}"
-                ) from e
+                break  # Success, exit retry loop
+
+            except RateLimitError as exc:
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        "Rate limited at entries %d-%d (attempt %d/%d), waiting %.0fs",
+                        batch[0].index,
+                        batch[-1].index,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        exc.retry_after,
+                    )
+                    if on_rate_limit is not None:
+                        on_rate_limit(exc.retry_after, attempt + 1, _MAX_RETRIES)
+                    time.sleep(exc.retry_after)
+                else:
+                    raise TranslationError(
+                        f"Rate limit exceeded after {_MAX_RETRIES} retries "
+                        f"for entries {batch[0].index}-{batch[-1].index}"
+                    ) from exc
+        else:
+            raise TranslationError(
+                f"Failed to translate entries {batch[0].index}-{batch[-1].index}"
+            )
 
     translated_entries = [
         SubtitleEntry(
