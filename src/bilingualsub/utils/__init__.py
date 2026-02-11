@@ -6,6 +6,8 @@ from bilingualsub.utils.ffmpeg import (
     burn_subtitles,
     extract_audio,
     extract_video_metadata,
+    get_audio_duration,
+    split_audio,
     trim_video,
 )
 
@@ -15,7 +17,9 @@ __all__ = [
     "burn_subtitles",
     "extract_audio",
     "extract_video_metadata",
+    "get_audio_duration",
     "get_groq_api_key",
     "get_settings",
+    "split_audio",
     "trim_video",
 ]

@@ -20,7 +20,7 @@ from bilingualsub.api.constants import (
     SSEEvent,
 )
 from bilingualsub.api.errors import InvalidRequestError, JobNotFoundError
-from bilingualsub.api.pipeline import run_burn, run_pipeline
+from bilingualsub.api.pipeline import run_burn, run_download, run_subtitle
 from bilingualsub.api.schemas import (
     BurnRequest,
     ErrorDetail,
@@ -84,7 +84,7 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
         start_time=body.start_time,
         end_time=body.end_time,
     )
-    _start_background_task(request, run_pipeline(job))
+    _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)
 
 
@@ -136,7 +136,7 @@ async def create_job_from_upload(
         end_time=end_time,
         local_video_path=saved_path,
     )
-    _start_background_task(request, run_pipeline(job))
+    _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)
 
 
@@ -179,6 +179,7 @@ async def job_events(job_id: str, request: Request) -> EventSourceResponse:
                 # Stop streaming on terminal events
                 if event["event"] in (SSEEvent.COMPLETE, SSEEvent.ERROR):
                     return
+                # download_complete does NOT close the stream
             except TimeoutError:
                 # Send keepalive ping
                 yield {"event": SSEEvent.PING, "data": ""}
@@ -226,6 +227,19 @@ async def download_file(job_id: str, file_type: str, request: Request) -> FileRe
         media_type=media_types[ft],
         filename=f"bilingualsub.{extensions[ft]}",
     )
+
+
+@router.post("/jobs/{job_id}/subtitle")
+async def start_subtitle(job_id: str, request: Request) -> dict[str, str]:
+    """Trigger subtitle generation for a downloaded job."""
+    job = _get_job_or_404(request, job_id)
+    if job.status != JobStatus.DOWNLOAD_COMPLETE:
+        raise InvalidRequestError(
+            "Job is not in download_complete state",
+            detail=f"Current status: {job.status}",
+        )
+    _start_background_task(request, run_subtitle(job))
+    return {"status": "subtitle_started"}
 
 
 @router.post("/jobs/{job_id}/burn")

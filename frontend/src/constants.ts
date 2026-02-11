@@ -1,6 +1,7 @@
 export const JobStatus = {
   PENDING: 'pending',
   DOWNLOADING: 'downloading',
+  DOWNLOAD_COMPLETE: 'download_complete',
   TRANSCRIBING: 'transcribing',
   TRANSLATING: 'translating',
   MERGING: 'merging',
@@ -22,10 +23,18 @@ export type FileType = (typeof FileType)[keyof typeof FileType];
 export const SSEEvent = {
   PROGRESS: 'progress',
   COMPLETE: 'complete',
+  DOWNLOAD_COMPLETE: 'download_complete',
   ERROR: 'error',
   PING: 'ping',
 } as const;
 export type SSEEvent = (typeof SSEEvent)[keyof typeof SSEEvent];
+
+export const DOWNLOAD_STEPS = [JobStatus.DOWNLOADING] as const;
+export const SUBTITLE_STEPS = [
+  JobStatus.TRANSCRIBING,
+  JobStatus.TRANSLATING,
+  JobStatus.MERGING,
+] as const;
 
 export const PIPELINE_STEPS = [
   JobStatus.DOWNLOADING,

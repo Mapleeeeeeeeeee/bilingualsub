@@ -24,19 +24,6 @@ class TestTranslateSubtitle:
         yield
         get_settings.cache_clear()
 
-    @pytest.fixture(autouse=True)
-    def set_api_key(self, monkeypatch):
-        """Set GROQ_API_KEY for all tests by default."""
-        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
-
-    @pytest.fixture
-    def no_env_file(self, tmp_path, monkeypatch):
-        """Run test in a directory without .env file."""
-        monkeypatch.chdir(tmp_path)
-        get_settings.cache_clear()
-        yield
-        get_settings.cache_clear()
-
     @pytest.fixture
     def mock_agent(self):
         """Mock Agno Agent."""
@@ -94,7 +81,7 @@ class TestTranslateSubtitle:
     def test_translate_subtitle_with_custom_languages(
         self, mock_agent, sample_subtitle
     ):
-        """Should use custom source and target languages."""
+        """Should use custom source and target languages in prompts."""
         mock_translator = Mock()
         mock_agent.return_value = mock_translator
 
@@ -104,12 +91,7 @@ class TestTranslateSubtitle:
 
         translate_subtitle(sample_subtitle, source_lang="en", target_lang="fr")
 
-        # Verify Agent was created with correct description
-        agent_call = mock_agent.call_args
-        assert "en" in agent_call.kwargs["description"]
-        assert "fr" in agent_call.kwargs["description"]
-
-        # Verify translator.run was called with correct language params
+        # Verify translator.run was called with correct language params in prompt
         translator_calls = mock_translator.run.call_args_list
         assert "en" in translator_calls[0][0][0]
         assert "fr" in translator_calls[0][0][0]
@@ -154,29 +136,26 @@ class TestTranslateSubtitle:
         with pytest.raises(TranslationError):
             translate_subtitle(sample_subtitle)
 
-    def test_translate_subtitle_uses_qwen_model(self, sample_subtitle):
-        """Should use qwen/qwen3-32b model for translation."""
-        with (
-            patch("bilingualsub.core.translator.Agent") as mock_agent,
-            patch("bilingualsub.core.translator.Groq") as mock_groq,
-        ):
-            mock_translator = Mock()
-            mock_agent.return_value = mock_translator
+    def test_translate_subtitle_uses_configured_model(
+        self, mock_agent, sample_subtitle, monkeypatch
+    ):
+        """Should use model from settings for translation."""
+        monkeypatch.setenv("TRANSLATOR_MODEL", "groq:qwen/qwen3-32b")
 
-            mock_response = Mock()
-            mock_response.content = "1. 你好\n2. 你好嗎"
-            mock_translator.run.return_value = mock_response
+        mock_translator = Mock()
+        mock_agent.return_value = mock_translator
 
-            translate_subtitle(sample_subtitle)
+        mock_response = Mock()
+        mock_response.content = "1. 你好\n2. 你好嗎"
+        mock_translator.run.return_value = mock_response
 
-            mock_groq.assert_called_once_with(
-                id="qwen/qwen3-32b",
-                api_key="test-api-key",
-                request_params={"reasoning_format": "hidden"},
-            )
+        translate_subtitle(sample_subtitle)
+
+        agent_call = mock_agent.call_args
+        assert agent_call.kwargs["model"] == "groq:qwen/qwen3-32b"
 
     @pytest.mark.parametrize(
-        "source_lang,target_lang,expected_desc_parts",
+        "source_lang,target_lang,expected_lang_parts",
         [
             ("en", "zh-TW", ["en", "zh-TW"]),
             ("ja", "en", ["ja", "en"]),
@@ -184,9 +163,9 @@ class TestTranslateSubtitle:
         ],
     )
     def test_translate_subtitle_with_different_language_pairs(
-        self, mock_agent, sample_subtitle, source_lang, target_lang, expected_desc_parts
+        self, mock_agent, sample_subtitle, source_lang, target_lang, expected_lang_parts
     ):
-        """Should handle different language pairs correctly."""
+        """Should handle different language pairs correctly in prompts."""
         mock_translator = Mock()
         mock_agent.return_value = mock_translator
 
@@ -198,10 +177,11 @@ class TestTranslateSubtitle:
             sample_subtitle, source_lang=source_lang, target_lang=target_lang
         )
 
-        agent_call = mock_agent.call_args
-        description = agent_call.kwargs["description"]
-        for part in expected_desc_parts:
-            assert part in description
+        # Verify translator.run was called with correct language params in prompt
+        translator_calls = mock_translator.run.call_args_list
+        prompt = translator_calls[0][0][0]
+        for part in expected_lang_parts:
+            assert part in prompt
 
     def test_translate_subtitle_returns_new_subtitle_object(
         self, mock_agent, sample_subtitle
@@ -221,28 +201,6 @@ class TestTranslateSubtitle:
         assert result is not sample_subtitle
         assert sample_subtitle.entries[0].text == original_text
         assert result.entries[0].text == "你好"
-
-    def test_missing_api_key_raises_error(
-        self, sample_subtitle, monkeypatch, no_env_file
-    ):
-        """Should raise ValueError when GROQ_API_KEY is not set."""
-        monkeypatch.delenv("GROQ_API_KEY", raising=False)
-
-        with pytest.raises(
-            ValueError, match="GROQ_API_KEY environment variable is not set"
-        ):
-            translate_subtitle(sample_subtitle)
-
-    def test_empty_api_key_raises_error(
-        self, sample_subtitle, monkeypatch, no_env_file
-    ):
-        """Should raise ValueError when GROQ_API_KEY is empty."""
-        monkeypatch.setenv("GROQ_API_KEY", "")
-
-        with pytest.raises(
-            ValueError, match="GROQ_API_KEY environment variable is not set"
-        ):
-            translate_subtitle(sample_subtitle)
 
 
 class TestParseBatchResponse:
@@ -288,11 +246,6 @@ class TestBatchTranslation:
         get_settings.cache_clear()
         yield
         get_settings.cache_clear()
-
-    @pytest.fixture(autouse=True)
-    def set_api_key(self, monkeypatch):
-        """Set GROQ_API_KEY for all tests by default."""
-        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
     def test_translate_batch_fallback_on_parse_failure(self):
         """Should fallback to one-by-one when batch parsing fails."""
@@ -415,3 +368,284 @@ class TestBatchTranslation:
         assert progress_calls[0] == (10, 25)
         assert progress_calls[1] == (20, 25)
         assert progress_calls[2] == (25, 25)
+
+
+class TestTranslationOverlap:
+    """Test context overlap between translation batches."""
+
+    @pytest.fixture(autouse=True)
+    def clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    @pytest.mark.unit
+    def test_first_batch_has_no_context(self):
+        """First batch should have context=None (no previous translations)."""
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(5)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            mock_response = Mock()
+            mock_response.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, 6))
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(subtitle)
+
+            # First (and only) batch prompt should NOT contain 【上文參考】
+            prompt = mock_translator.run.call_args_list[0][0][0]
+            assert "上文參考" not in prompt
+
+    @pytest.mark.unit
+    def test_second_batch_includes_context(self):
+        """Second batch should include context from last N entries of first batch."""
+        # Create 15 entries (batch 1: 10, batch 2: 5)
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(15)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            def make_response(*args, **kwargs):
+                prompt_text = args[0]
+                lines = [
+                    line
+                    for line in prompt_text.strip().splitlines()
+                    if line.strip() and line.strip()[0].isdigit()
+                ]
+                count = len(lines)
+                resp = Mock()
+                resp.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, count + 1))
+                return resp
+
+            mock_translator.run.side_effect = make_response
+
+            translate_subtitle(subtitle)
+
+            # Second batch prompt should contain context
+            assert mock_translator.run.call_count == 2
+            second_prompt = mock_translator.run.call_args_list[1][0][0]
+            assert "上文參考" in second_prompt
+            # Should contain entries from the end of first batch (last 3)
+            assert "Line 8" in second_prompt
+            assert "Line 9" in second_prompt
+            assert "Line 10" in second_prompt
+
+    @pytest.mark.unit
+    def test_context_contains_original_and_translated(self):
+        """Context should contain both original text and translated text."""
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(15)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            def make_response(*args, **kwargs):
+                prompt_text = args[0]
+                lines = [
+                    line
+                    for line in prompt_text.strip().splitlines()
+                    if line.strip() and line.strip()[0].isdigit()
+                ]
+                count = len(lines)
+                resp = Mock()
+                resp.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, count + 1))
+                return resp
+
+            mock_translator.run.side_effect = make_response
+
+            translate_subtitle(subtitle)
+
+            second_prompt = mock_translator.run.call_args_list[1][0][0]
+            # Context should have "original → translated" format
+            assert "→" in second_prompt
+            assert "翻譯" in second_prompt  # translated text should be in context
+
+    @pytest.mark.unit
+    def test_first_batch_has_lookahead(self):
+        """First batch should include lookahead from second batch."""
+        # Create 15 entries (batch 1: 10, batch 2: 5)
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(15)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            def make_response(*args, **kwargs):
+                prompt_text = args[0]
+                lines = [
+                    line
+                    for line in prompt_text.strip().splitlines()
+                    if line.strip() and line.strip()[0].isdigit()
+                ]
+                count = len(lines)
+                resp = Mock()
+                resp.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, count + 1))
+                return resp
+
+            mock_translator.run.side_effect = make_response
+
+            translate_subtitle(subtitle)
+
+            # First batch prompt should contain lookahead
+            first_prompt = mock_translator.run.call_args_list[0][0][0]
+            assert "下文參考" in first_prompt
+            # Should contain entries from start of second batch (first 3)
+            assert "Line 11" in first_prompt
+            assert "Line 12" in first_prompt
+            assert "Line 13" in first_prompt
+
+    @pytest.mark.unit
+    def test_last_batch_has_no_lookahead(self):
+        """Last batch should NOT include lookahead (no next batch)."""
+        # Create 15 entries (batch 1: 10, batch 2: 5)
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(15)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            def make_response(*args, **kwargs):
+                prompt_text = args[0]
+                lines = [
+                    line
+                    for line in prompt_text.strip().splitlines()
+                    if line.strip() and line.strip()[0].isdigit()
+                ]
+                count = len(lines)
+                resp = Mock()
+                resp.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, count + 1))
+                return resp
+
+            mock_translator.run.side_effect = make_response
+
+            translate_subtitle(subtitle)
+
+            # Second (last) batch prompt should NOT contain lookahead
+            assert mock_translator.run.call_count == 2
+            second_prompt = mock_translator.run.call_args_list[1][0][0]
+            assert "下文參考" not in second_prompt
+
+    @pytest.mark.unit
+    def test_lookahead_not_translated(self):
+        """Lookahead entries should use bullet format (not numbered) to prevent translation."""
+        # Create 15 entries (batch 1: 10, batch 2: 5)
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(15)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            def make_response(*args, **kwargs):
+                prompt_text = args[0]
+                lines = [
+                    line
+                    for line in prompt_text.strip().splitlines()
+                    if line.strip() and line.strip()[0].isdigit()
+                ]
+                count = len(lines)
+                resp = Mock()
+                resp.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, count + 1))
+                return resp
+
+            mock_translator.run.side_effect = make_response
+
+            translate_subtitle(subtitle)
+
+            # Check first batch prompt
+            first_prompt = mock_translator.run.call_args_list[0][0][0]
+            # Lookahead section should contain bullet points
+            lookahead_section = first_prompt.split("下文參考")[1].split("請")[0]
+            # Should have "- Line 11", "- Line 12", "- Line 13" (not "11. Line 11")
+            assert "- Line 11" in lookahead_section
+            assert "- Line 12" in lookahead_section
+            assert "- Line 13" in lookahead_section
+            # Verify it's NOT numbered format
+            assert "11." not in lookahead_section
+            assert "12." not in lookahead_section
+            assert "13." not in lookahead_section
+
+    @pytest.mark.unit
+    def test_small_subtitle_has_no_lookahead(self):
+        """Small subtitle (single batch) should NOT include lookahead."""
+        # Create 5 entries (only one batch)
+        entries = [
+            SubtitleEntry(
+                index=i + 1,
+                start=timedelta(seconds=i * 2),
+                end=timedelta(seconds=i * 2 + 2),
+                text=f"Line {i + 1}",
+            )
+            for i in range(5)
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+
+            mock_response = Mock()
+            mock_response.content = "\n".join(f"{i}. 翻譯 {i}" for i in range(1, 6))
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(subtitle)
+
+            # First (and only) batch prompt should NOT contain lookahead
+            prompt = mock_translator.run.call_args_list[0][0][0]
+            assert "下文參考" not in prompt

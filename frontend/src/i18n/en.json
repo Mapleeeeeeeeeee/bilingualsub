@@ -8,7 +8,12 @@
     "start_over": "Start Over",
     "downloads_title": "Downloads",
     "downloads_desc": "Your video has been successfully processed. You can download the subtitles separately or the burned-in video.",
-    "back_to_edit": "Re-edit Subtitles"
+    "back_to_edit": "Re-edit Subtitles",
+    "download_complete_title": "Download Complete",
+    "download_complete_desc": "Video downloaded successfully. Ready to generate subtitles.",
+    "generate_subtitles": "Generate Subtitles",
+    "subtitling_desc": "Please wait while we generate subtitles.",
+    "download_original_video": "Download Original Video"
   },
   "form": {
     "url_placeholder": "Paste YouTube video URL",

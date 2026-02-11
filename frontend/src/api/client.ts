@@ -61,6 +61,11 @@ class ApiClient {
       handlers.onProgress(data);
     });
 
+    es.addEventListener('download_complete', event => {
+      const data = JSON.parse(event.data);
+      handlers.onDownloadComplete?.(data);
+    });
+
     es.addEventListener('complete', event => {
       const data = JSON.parse(event.data);
       handlers.onComplete(data);
@@ -91,6 +96,14 @@ class ApiClient {
       throw await ApiError.fromResponse(response);
     }
     return response.text();
+  }
+
+  async startSubtitle(jobId: string): Promise<{ status: string }> {
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/subtitle`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw await ApiError.fromResponse(response);
+    return response.json();
   }
 
   async burnJob(jobId: string, srtContent: string): Promise<{ status: string }> {

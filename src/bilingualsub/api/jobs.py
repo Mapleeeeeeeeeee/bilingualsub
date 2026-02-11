@@ -41,6 +41,8 @@ class Job:
     error_code: str | None = None
     error_message: str | None = None
     error_detail: str | None = None
+    video_width: int = 0
+    video_height: int = 0
     output_files: dict[FileType, Path] = field(default_factory=dict)
     event_queue: asyncio.Queue[dict[str, object]] = field(default_factory=asyncio.Queue)
     created_at: float = field(default_factory=time.monotonic)

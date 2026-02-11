@@ -8,6 +8,7 @@ class JobStatus(StrEnum):
 
     PENDING = "pending"
     DOWNLOADING = "downloading"
+    DOWNLOAD_COMPLETE = "download_complete"
     TRANSCRIBING = "transcribing"
     TRANSLATING = "translating"
     MERGING = "merging"
@@ -31,6 +32,7 @@ class SSEEvent(StrEnum):
 
     PROGRESS = "progress"
     COMPLETE = "complete"
+    DOWNLOAD_COMPLETE = "download_complete"
     ERROR = "error"
     PING = "ping"
 

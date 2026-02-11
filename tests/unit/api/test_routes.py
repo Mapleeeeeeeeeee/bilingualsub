@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from bilingualsub.api.app import create_app
+from bilingualsub.api.constants import JobStatus
 from bilingualsub.api.jobs import JobManager
 
 
@@ -20,7 +21,10 @@ def app():
 @pytest.fixture
 async def client(app):
     """Async HTTP client for testing (pipeline mocked to prevent side effects)."""
-    with patch("bilingualsub.api.routes.run_pipeline", new_callable=AsyncMock):
+    with (
+        patch("bilingualsub.api.routes.run_download", new_callable=AsyncMock),
+        patch("bilingualsub.api.routes.run_subtitle", new_callable=AsyncMock),
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
@@ -113,3 +117,34 @@ class TestErrorResponseFormat:
         assert "message" in data
         # detail can be null
         assert "detail" in data
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestStartSubtitle:
+    async def test_start_subtitle_wrong_status(self, client: AsyncClient, app) -> None:
+        """Should return 422 when job is not in download_complete state."""
+        create_resp = await client.post(
+            "/api/jobs",
+            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+        )
+        job_id = create_resp.json()["job_id"]
+
+        response = await client.post(f"/api/jobs/{job_id}/subtitle")
+        assert response.status_code == 422
+
+    async def test_start_subtitle_success(self, client: AsyncClient, app) -> None:
+        """Should start subtitle when job is download_complete."""
+        create_resp = await client.post(
+            "/api/jobs",
+            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+        )
+        job_id = create_resp.json()["job_id"]
+
+        # Manually set job status to download_complete
+        job = app.state.job_manager.get_job(job_id)
+        job.status = JobStatus.DOWNLOAD_COMPLETE
+
+        response = await client.post(f"/api/jobs/{job_id}/subtitle")
+        assert response.status_code == 200
+        assert response.json()["status"] == "subtitle_started"

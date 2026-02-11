@@ -37,6 +37,7 @@ export interface SSEProgressData {
 export interface SSEHandlers {
   onProgress: (data: SSEProgressData) => void;
   onComplete: (data: SSEProgressData) => void;
+  onDownloadComplete?: (data: SSEProgressData) => void;
   onError: (data: { code: string; message: string; detail?: string }) => void;
 }
 

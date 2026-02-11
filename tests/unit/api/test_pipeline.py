@@ -6,9 +6,9 @@ from unittest.mock import patch
 
 import pytest
 
-from bilingualsub.api.constants import JobStatus, SSEEvent
+from bilingualsub.api.constants import FileType, JobStatus, SSEEvent
 from bilingualsub.api.jobs import Job
-from bilingualsub.api.pipeline import run_pipeline
+from bilingualsub.api.pipeline import run_download, run_pipeline, run_subtitle
 from bilingualsub.core.downloader import DownloadError, VideoMetadata
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 
@@ -243,4 +243,89 @@ class TestRunPipeline:
         await run_pipeline(job)
 
         mock_trim.assert_not_called()
+        assert job.status == JobStatus.COMPLETED
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestRunDownload:
+    @patch("bilingualsub.api.pipeline.extract_audio")
+    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    async def test_run_download_sends_download_complete(
+        self, mock_download, mock_extract_audio
+    ) -> None:
+        """run_download should send download_complete event."""
+        mock_download.return_value = _make_metadata()
+
+        job = _make_job()
+        await run_download(job)
+
+        events = []
+        while not job.event_queue.empty():
+            events.append(job.event_queue.get_nowait())
+
+        event_types = [e["event"] for e in events]
+        assert SSEEvent.DOWNLOAD_COMPLETE in event_types
+        assert SSEEvent.COMPLETE not in event_types
+        assert job.status == JobStatus.DOWNLOAD_COMPLETE
+
+    @patch("bilingualsub.api.pipeline.extract_audio")
+    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    async def test_run_download_saves_metadata(
+        self, mock_download, mock_extract_audio
+    ) -> None:
+        """run_download should save video dimensions to job."""
+        mock_download.return_value = _make_metadata()
+
+        job = _make_job()
+        await run_download(job)
+
+        assert job.video_width == 1920
+        assert job.video_height == 1080
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestRunSubtitle:
+    @patch("bilingualsub.api.pipeline.serialize_bilingual_ass")
+    @patch("bilingualsub.api.pipeline.serialize_srt")
+    @patch("bilingualsub.api.pipeline.merge_subtitles")
+    @patch("bilingualsub.api.pipeline.translate_subtitle")
+    @patch("bilingualsub.api.pipeline.transcribe_audio")
+    async def test_run_subtitle_sends_complete(
+        self,
+        mock_transcribe,
+        mock_translate,
+        mock_merge,
+        mock_srt,
+        mock_ass,
+        tmp_path,
+    ) -> None:
+        """run_subtitle should send complete event."""
+        sub = _make_subtitle()
+        mock_transcribe.return_value = sub
+        mock_translate.return_value = sub
+        mock_merge.return_value = sub.entries
+        mock_srt.return_value = "1\n00:00:00,000 --> 00:00:04,000\nLine 1"
+        mock_ass.return_value = "[Script Info]\n..."
+
+        job = _make_job()
+        # Set up job as if download phase completed
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video")
+        job.output_files[FileType.AUDIO] = audio_path
+        job.output_files[FileType.SOURCE_VIDEO] = video_path
+        job.video_width = 1920
+        job.video_height = 1080
+
+        await run_subtitle(job)
+
+        events = []
+        while not job.event_queue.empty():
+            events.append(job.event_queue.get_nowait())
+
+        event_types = [e["event"] for e in events]
+        assert SSEEvent.COMPLETE in event_types
         assert job.status == JobStatus.COMPLETED

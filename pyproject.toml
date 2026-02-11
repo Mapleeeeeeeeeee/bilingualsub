@@ -3,7 +3,7 @@ name = "bilingualsub"
 version = "0.1.0"
 description = "YouTube bilingual subtitle generator with LLM translation"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "BilingualSub Team" }]
 keywords = ["youtube", "subtitle", "translation", "whisper", "llm"]
@@ -32,6 +32,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "ollama>=0.6.1",
     "openai>=2.17.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.optional-dependencies]
@@ -54,8 +55,8 @@ e2e = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/user/bilingualsub"
-Repository = "https://github.com/user/bilingualsub"
+Homepage = "https://github.com/Mapleeeeeeeeeee/bilingualsub"
+Repository = "https://github.com/Mapleeeeeeeeeee/bilingualsub"
 
 [build-system]
 requires = ["hatchling"]
@@ -98,6 +99,7 @@ ignore = [
 known-first-party = ["bilingualsub"]
 
 [tool.ruff.lint.per-file-ignores]
+"src/bilingualsub/api/app.py" = ["E402"]  # load_dotenv() must run before other imports
 "tests/**/*.py" = [
     "ARG",     # Unused function argument (common in parametrized tests)
     "PLR2004", # Magic value comparison
@@ -131,6 +133,7 @@ module = [
     "groq.*",
     "agno.*",
     "ffmpeg.*",
+    "openai.*",
 ]
 ignore_missing_imports = true
 

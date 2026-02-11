@@ -1,5 +1,6 @@
 """Unit tests for FFmpeg utilities."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,6 +9,8 @@ from bilingualsub.utils.ffmpeg import (
     FFmpegError,
     burn_subtitles,
     extract_audio,
+    get_audio_duration,
+    split_audio,
     trim_video,
 )
 
@@ -485,3 +488,133 @@ class TestTrimVideo:
 
         with pytest.raises(FFmpegError, match=r"Failed to trim video.*Generic error"):
             trim_video(video_path, output_path, 0.0, 10.0)
+
+
+class TestGetAudioDuration:
+    """Test cases for get_audio_duration function."""
+
+    @pytest.mark.unit
+    def test_successful_duration_extraction(self, tmp_path):
+        """Given valid audio, when getting duration, then returns seconds."""
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        ffprobe_output = json.dumps({"format": {"duration": "123.456"}})
+        with patch("bilingualsub.utils.ffmpeg.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=ffprobe_output)
+            result = get_audio_duration(audio_path)
+
+        assert result == 123.456
+        mock_run.assert_called_once()
+
+    @pytest.mark.unit
+    def test_ffprobe_failure_raises_ffmpeg_error(self, tmp_path):
+        """Given ffprobe fails, when getting duration, then raises FFmpegError."""
+        audio_path = tmp_path / "audio.mp3"
+
+        with (
+            patch(
+                "bilingualsub.utils.ffmpeg.subprocess.run",
+                side_effect=FileNotFoundError("ffprobe not found"),
+            ),
+            pytest.raises(FFmpegError, match="ffprobe failed"),
+        ):
+            get_audio_duration(audio_path)
+
+    @pytest.mark.unit
+    def test_missing_duration_field_raises_ffmpeg_error(self, tmp_path):
+        """Given no duration in output, when getting duration, then raises FFmpegError."""
+        audio_path = tmp_path / "audio.mp3"
+
+        ffprobe_output = json.dumps({"format": {}})
+        with patch("bilingualsub.utils.ffmpeg.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=ffprobe_output)
+            with pytest.raises(FFmpegError, match="Failed to get duration"):
+                get_audio_duration(audio_path)
+
+
+class TestSplitAudio:
+    """Test cases for split_audio function."""
+
+    @pytest.fixture
+    def mock_ffmpeg(self):
+        """Mock ffmpeg module."""
+        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock:
+            mock_stream = MagicMock()
+            mock.input.return_value = mock_stream
+            mock_stream.output.return_value = mock_stream
+            mock_stream.overwrite_output.return_value = mock_stream
+            mock_stream.run.return_value = None
+            yield mock
+
+    @pytest.mark.unit
+    def test_short_audio_returns_single_chunk(self, tmp_path, mock_ffmpeg):
+        """Given audio shorter than chunk_duration, when splitting, then returns one chunk."""
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        with patch("bilingualsub.utils.ffmpeg.get_audio_duration", return_value=600.0):
+            result = split_audio(audio_path, output_dir=tmp_path)
+
+        assert len(result) == 1
+        assert result[0][1] == 0.0
+        assert "chunk0" in result[0][0].name
+
+    @pytest.mark.unit
+    def test_long_audio_splits_into_correct_number_of_chunks(
+        self, tmp_path, mock_ffmpeg
+    ):
+        """Given long audio, when splitting, then creates correct chunk count."""
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        # 3600 seconds / 1500 default chunk = 3 chunks (0, 1500, 3000)
+        with patch("bilingualsub.utils.ffmpeg.get_audio_duration", return_value=3600.0):
+            result = split_audio(audio_path, output_dir=tmp_path)
+
+        assert len(result) == 3
+        assert result[0][1] == 0.0
+        assert result[1][1] == 1500.0
+        assert result[2][1] == 3000.0
+
+    @pytest.mark.unit
+    def test_custom_chunk_duration(self, tmp_path, mock_ffmpeg):
+        """Given custom chunk_duration, when splitting, then uses it."""
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        with patch("bilingualsub.utils.ffmpeg.get_audio_duration", return_value=1000.0):
+            result = split_audio(audio_path, output_dir=tmp_path, chunk_duration=400.0)
+
+        assert len(result) == 3
+        assert result[0][1] == 0.0
+        assert result[1][1] == 400.0
+        assert result[2][1] == 800.0
+
+    @pytest.mark.unit
+    def test_ffmpeg_failure_raises_ffmpeg_error(self, tmp_path):
+        """Given ffmpeg fails, when splitting, then raises FFmpegError."""
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio")
+
+        with (
+            patch("bilingualsub.utils.ffmpeg.get_audio_duration", return_value=3600.0),
+            patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock_ff,
+        ):
+            mock_stream = MagicMock()
+            mock_ff.input.return_value = mock_stream
+            mock_stream.output.return_value = mock_stream
+            mock_stream.overwrite_output.return_value = mock_stream
+            error = Exception("split failed")
+            mock_stream.run.side_effect = error
+
+            with pytest.raises(FFmpegError, match="Failed to split audio"):
+                split_audio(audio_path, output_dir=tmp_path)
+
+    @pytest.mark.unit
+    def test_non_existent_file_raises_error(self, tmp_path):
+        """Given non-existent file, when splitting, then raises ValueError."""
+        audio_path = tmp_path / "nonexistent.mp3"
+
+        with pytest.raises(ValueError, match="Audio file does not exist"):
+            split_audio(audio_path, output_dir=tmp_path)

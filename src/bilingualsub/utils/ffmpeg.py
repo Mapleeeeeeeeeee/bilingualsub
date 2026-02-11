@@ -238,3 +238,97 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
         "height": height,
         "fps": fps,
     }
+
+
+def get_audio_duration(audio_path: Path) -> float:
+    """Get audio duration in seconds using ffprobe.
+
+    Args:
+        audio_path: Path to the audio file
+
+    Returns:
+        Duration in seconds
+
+    Raises:
+        FFmpegError: If ffprobe fails or duration is missing
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        str(audio_path),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise FFmpegError(f"ffprobe failed for {audio_path}: {e}") from e
+
+    data = json.loads(result.stdout)
+
+    try:
+        return float(data["format"]["duration"])
+    except (KeyError, ValueError, TypeError) as e:
+        raise FFmpegError(f"Failed to get duration from {audio_path}: {e}") from e
+
+
+def split_audio(
+    audio_path: Path,
+    output_dir: Path,
+    chunk_duration: float = 1500.0,
+) -> list[tuple[Path, float]]:
+    """Split audio into chunks.
+
+    Args:
+        audio_path: Path to the audio file
+        output_dir: Directory for output chunks
+        chunk_duration: Maximum chunk duration in seconds (default 25 min)
+
+    Returns:
+        List of (chunk_path, time_offset_seconds) tuples
+
+    Raises:
+        FFmpegError: If ffmpeg/ffprobe fails
+        ValueError: If audio file does not exist
+    """
+    if not audio_path.exists():
+        raise ValueError(f"Audio file does not exist: {audio_path}")
+    if not audio_path.is_file():
+        raise ValueError(f"Audio path is not a file: {audio_path}")
+
+    total_duration = get_audio_duration(audio_path)
+    chunks: list[tuple[Path, float]] = []
+    offset = 0.0
+    chunk_idx = 0
+
+    while offset < total_duration:
+        chunk_path = (
+            output_dir / f"{audio_path.stem}_chunk{chunk_idx}{audio_path.suffix}"
+        )
+        duration = min(chunk_duration, total_duration - offset)
+
+        try:
+            (
+                ffmpeg.input(str(audio_path), ss=offset, t=duration)
+                .output(str(chunk_path), acodec="copy")
+                .overwrite_output()
+                .run(capture_stdout=True, capture_stderr=True)
+            )
+        except Exception as e:
+            if hasattr(e, "stderr") and e.stderr:
+                stderr = e.stderr
+                error_message = (
+                    stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+                )
+            else:
+                error_message = str(e)
+            raise FFmpegError(f"Failed to split audio: {error_message}") from e
+
+        chunks.append((chunk_path, offset))
+        offset += chunk_duration
+        chunk_idx += 1
+
+    return chunks

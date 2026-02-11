@@ -5,7 +5,16 @@ import { apiClient } from '../api/client';
 
 // State type
 interface JobState {
-  phase: 'idle' | 'submitting' | 'processing' | 'completed' | 'burning' | 'burned' | 'failed';
+  phase:
+    | 'idle'
+    | 'submitting'
+    | 'processing'
+    | 'download_complete'
+    | 'subtitling'
+    | 'completed'
+    | 'burning'
+    | 'burned'
+    | 'failed';
   jobId: string | null;
   status: JobStatus | null;
   progress: number;
@@ -18,6 +27,8 @@ type JobAction =
   | { type: 'SUBMIT' }
   | { type: 'JOB_CREATED'; jobId: string }
   | { type: 'PROGRESS'; data: SSEProgressData }
+  | { type: 'DOWNLOAD_COMPLETE' }
+  | { type: 'SUBTITLE_START' }
   | { type: 'COMPLETE' }
   | { type: 'ERROR'; error: { code: string; message: string; detail?: string } }
   | { type: 'RESET' }
@@ -48,6 +59,20 @@ function jobReducer(state: JobState, action: JobAction): JobState {
         status: action.data.status,
         progress: action.data.progress,
         currentStep: action.data.current_step,
+      };
+    case 'DOWNLOAD_COMPLETE':
+      return {
+        ...state,
+        phase: 'download_complete',
+        progress: 100,
+        status: JobStatus.DOWNLOAD_COMPLETE,
+      };
+    case 'SUBTITLE_START':
+      return {
+        ...state,
+        phase: 'subtitling',
+        progress: 0,
+        status: JobStatus.TRANSCRIBING,
       };
     case 'COMPLETE':
       return {
@@ -111,6 +136,10 @@ export function useJob() {
         // Connect SSE
         eventSourceRef.current = apiClient.connectSSE(response.job_id, {
           onProgress: data => dispatch({ type: 'PROGRESS', data }),
+          onDownloadComplete: () => {
+            dispatch({ type: 'DOWNLOAD_COMPLETE' });
+            // Do NOT cleanup SSE - keep connection alive for subtitle phase
+          },
           onComplete: () => {
             dispatch({ type: 'COMPLETE' });
             cleanup();
@@ -130,6 +159,34 @@ export function useJob() {
     },
     [cleanup]
   );
+
+  const subtitleJob = useCallback(async () => {
+    if (!state.jobId) return;
+    dispatch({ type: 'SUBTITLE_START' });
+    try {
+      await apiClient.startSubtitle(state.jobId);
+      // Reconnect SSE if the previous connection was closed
+      if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+        eventSourceRef.current = apiClient.connectSSE(state.jobId, {
+          onProgress: data => dispatch({ type: 'PROGRESS', data }),
+          onComplete: () => {
+            dispatch({ type: 'COMPLETE' });
+            cleanup();
+          },
+          onError: error => {
+            dispatch({ type: 'ERROR', error });
+            cleanup();
+          },
+        });
+      }
+    } catch (err) {
+      const error =
+        err instanceof Error
+          ? { code: 'subtitle_error', message: err.message }
+          : { code: 'unknown_error', message: 'An unknown error occurred' };
+      dispatch({ type: 'ERROR', error });
+    }
+  }, [state.jobId, cleanup]);
 
   const burnJob = useCallback(
     async (srtContent: string) => {
@@ -170,5 +227,5 @@ export function useJob() {
     dispatch({ type: 'BACK_TO_EDIT' });
   }, []);
 
-  return { state, submitJob, burnJob, reset, backToEdit };
+  return { state, submitJob, subtitleJob, burnJob, reset, backToEdit };
 }

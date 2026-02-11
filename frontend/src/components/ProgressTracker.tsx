@@ -1,24 +1,29 @@
 import { useTranslation } from 'react-i18next';
-import { PIPELINE_STEPS, JobStatus } from '../constants';
+import { PIPELINE_STEPS, type JobStatus } from '../constants';
 
 interface ProgressTrackerProps {
   status: JobStatus | null;
   progress: number;
   currentStep: string | null;
+  steps?: readonly JobStatus[];
 }
 
-export function ProgressTracker({ status, progress }: ProgressTrackerProps) {
+export function ProgressTracker({
+  status,
+  progress,
+  steps = PIPELINE_STEPS,
+}: ProgressTrackerProps) {
   const { t } = useTranslation();
 
   if (!status) return null;
 
-  const currentStepIndex = PIPELINE_STEPS.indexOf(status as (typeof PIPELINE_STEPS)[number]);
+  const currentStepIndex = steps.indexOf(status);
 
   return (
     <div className="space-y-8 max-w-md mx-auto">
       {/* Step indicators (Minimal) */}
       <div className="flex justify-between items-center px-4">
-        {PIPELINE_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const isActive = index === currentStepIndex;
           const isCompleted = index < currentStepIndex;
 

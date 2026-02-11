@@ -6,13 +6,17 @@ import { DownloadLinks } from './components/DownloadLinks';
 import { VideoPreview } from './components/VideoPreview';
 import { SubtitleEditor } from './components/SubtitleEditor';
 import { useJob } from './hooks/useJob';
+import { SUBTITLE_STEPS, FileType } from './constants';
+import { apiClient } from './api/client';
 
 function App() {
   const { t } = useTranslation();
-  const { state, submitJob, burnJob, reset, backToEdit } = useJob();
+  const { state, submitJob, subtitleJob, burnJob, reset, backToEdit } = useJob();
 
   const isIdle = state.phase === 'idle';
   const isProcessing = state.phase === 'submitting' || state.phase === 'processing';
+  const isDownloadComplete = state.phase === 'download_complete' && state.jobId;
+  const isSubtitling = state.phase === 'subtitling';
   const isCompleted = state.phase === 'completed' && state.jobId;
   const isBurning = state.phase === 'burning';
   const isBurned = state.phase === 'burned' && state.jobId;
@@ -50,6 +54,62 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+            />
+          </div>
+        )}
+
+        {/* DOWNLOAD COMPLETE STATE: Preview + Generate Subtitles */}
+        {isDownloadComplete && (
+          <div className="max-w-2xl mx-auto w-full space-y-12 animate-fade-in-up">
+            <div className="text-center space-y-4">
+              <h2 className="text-3xl font-serif font-light">{t('app.download_complete_title')}</h2>
+              <p className="text-gray-400">{t('app.download_complete_desc')}</p>
+            </div>
+
+            {/* Video Preview */}
+            <div className="rounded-2xl overflow-hidden shadow-lg shadow-gray-200 bg-black">
+              <VideoPreview jobId={state.jobId!} fileType={FileType.SOURCE_VIDEO} />
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col items-center gap-4">
+              <button
+                onClick={subtitleJob}
+                className="px-8 py-3 bg-black text-white rounded-full hover:scale-105 transition-transform"
+              >
+                {t('app.generate_subtitles')}
+              </button>
+              <div className="flex items-center gap-6">
+                <a
+                  href={apiClient.getDownloadUrl(state.jobId!, FileType.SOURCE_VIDEO)}
+                  download
+                  className="text-sm text-gray-400 hover:text-black transition-colors"
+                >
+                  {t('app.download_original_video')}
+                </a>
+                <button
+                  onClick={reset}
+                  className="text-sm text-gray-400 hover:text-black transition-colors"
+                >
+                  {t('app.start_over')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUBTITLING STATE: Subtitle generation progress */}
+        {isSubtitling && (
+          <div className="max-w-xl mx-auto w-full space-y-12 text-center animate-fade-in-up">
+            <div className="space-y-4">
+              <h2 className="text-3xl font-serif font-light">{t('app.processing_title')}</h2>
+              <p className="text-gray-400">{t('app.subtitling_desc')}</p>
+            </div>
+            <ProgressTracker
+              status={state.status}
+              progress={state.progress}
+              currentStep={state.currentStep}
+              steps={SUBTITLE_STEPS}
             />
           </div>
         )}

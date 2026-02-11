@@ -3,6 +3,7 @@
 import json
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,13 +39,19 @@ class VideoMetadata:
             raise ValueError("Title cannot be empty or whitespace-only")
 
 
-def download_youtube_video(url: str, output_path: Path) -> VideoMetadata:
+def download_youtube_video(
+    url: str,
+    output_path: Path,
+    on_progress: Callable[[float, float], None] | None = None,
+) -> VideoMetadata:
     """
     Download YouTube video and extract metadata.
 
     Args:
         url: YouTube video URL
         output_path: Path where video will be saved (including extension)
+        on_progress: Optional callback for download progress
+            (downloaded_bytes, total_bytes)
 
     Returns:
         VideoMetadata with video information
@@ -67,7 +74,7 @@ def download_youtube_video(url: str, output_path: Path) -> VideoMetadata:
 
     # Download video and get info_dict
     try:
-        info_dict = _download_video(url, output_path)
+        info_dict = _download_video(url, output_path, on_progress=on_progress)
     except Exception as e:
         raise DownloadError(f"Failed to download video: {e}") from e
 
@@ -104,8 +111,30 @@ def _is_youtube_url(url: str) -> bool:
     return any(domain in url for domain in youtube_domains)
 
 
-def _download_video(url: str, output_path: Path) -> dict[str, Any]:
+def _download_video(
+    url: str,
+    output_path: Path,
+    on_progress: Callable[[float, float], None] | None = None,
+) -> dict[str, Any]:
     """Download video using yt-dlp and return info_dict."""
+    last_reported = [0.0]  # Use list for mutability in closure
+
+    def _progress_hook(d: dict[str, Any]) -> None:
+        if on_progress is None:
+            return
+        if d.get("status") != "downloading":
+            return
+        downloaded = float(d.get("downloaded_bytes", 0) or 0)
+        total = float(d.get("total_bytes") or d.get("total_bytes_estimate") or 0)
+        if total <= 0:
+            return
+        pct = downloaded / total
+        # Throttle: only report every 2%
+        if pct - last_reported[0] < 0.02 and pct < 1.0:
+            return
+        last_reported[0] = pct
+        on_progress(downloaded, total)
+
     # Check if FFmpeg is available
     has_ffmpeg = shutil.which("ffmpeg") is not None
 
@@ -117,6 +146,7 @@ def _download_video(url: str, output_path: Path) -> dict[str, Any]:
             "merge_output_format": "mp4",
             "quiet": True,
             "no_warnings": True,
+            "progress_hooks": [_progress_hook],
         }
     else:
         # Fallback format (no merge required, works without FFmpeg)
@@ -125,6 +155,7 @@ def _download_video(url: str, output_path: Path) -> dict[str, Any]:
             "outtmpl": str(output_path.with_suffix("")),  # yt-dlp adds extension
             "quiet": True,
             "no_warnings": True,
+            "progress_hooks": [_progress_hook],
         }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

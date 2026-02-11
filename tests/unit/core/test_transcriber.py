@@ -35,6 +35,12 @@ class TestTranscribeAudio:
             yield mock
 
     @pytest.fixture
+    def mock_openai(self):
+        """Mock OpenAI client."""
+        with patch("bilingualsub.core.transcriber.OpenAI") as mock:
+            yield mock
+
+    @pytest.fixture
     def valid_verbose_json_response(self):
         """Return a mock verbose_json transcription response."""
         response = Mock()
@@ -136,17 +142,46 @@ class TestTranscribeAudio:
         with pytest.raises(ValueError, match="Audio path is not a file"):
             transcribe_audio(audio_dir)
 
-    def test_file_too_large_raises_error(self, tmp_path, monkeypatch):
-        """Test that file larger than 25MB raises error."""
+    def test_large_file_triggers_chunking(self, tmp_path, mock_groq, monkeypatch):
+        """Test that file larger than 25MB triggers chunking instead of error."""
         monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
 
         audio_path = tmp_path / "large_audio.mp3"
-        # Create a file larger than 25MB
         large_content = b"x" * (26 * 1024 * 1024)
         audio_path.write_bytes(large_content)
 
-        with pytest.raises(ValueError, match=r"File size .* exceeds Groq's 25MB limit"):
-            transcribe_audio(audio_path)
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+
+        # Create two mock responses for two chunks
+        response1 = Mock()
+        response1.segments = [
+            {"id": 0, "start": 0.0, "end": 2.0, "text": " Hello"},
+        ]
+        response2 = Mock()
+        response2.segments = [
+            {"id": 0, "start": 0.0, "end": 3.0, "text": " World"},
+        ]
+        mock_client.audio.transcriptions.create.side_effect = [response1, response2]
+
+        chunk0 = tmp_path / "large_audio_chunk0.mp3"
+        chunk0.write_bytes(b"chunk0")
+        chunk1 = tmp_path / "large_audio_chunk1.mp3"
+        chunk1.write_bytes(b"chunk1")
+
+        with patch(
+            "bilingualsub.core.transcriber.split_audio",
+            return_value=[(chunk0, 0.0), (chunk1, 1500.0)],
+        ):
+            result = transcribe_audio(audio_path)
+
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 2
+        assert result.entries[0].text == "Hello"
+        assert result.entries[0].start == timedelta(seconds=0.0)
+        assert result.entries[1].text == "World"
+        assert result.entries[1].start == timedelta(seconds=1500.0)
+        assert result.entries[1].end == timedelta(seconds=1503.0)
 
     def test_missing_api_key_raises_error(self, tmp_path, monkeypatch, no_env_file):
         """Test that missing GROQ_API_KEY raises error."""
@@ -304,3 +339,81 @@ class TestTranscribeAudio:
 
         call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
         assert call_kwargs["language"] == "en"
+
+    def test_transcribe_with_openai_provider(
+        self, tmp_path, mock_openai, valid_verbose_json_response, monkeypatch
+    ):
+        """Test transcribing with OpenAI provider."""
+        monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+        monkeypatch.setenv("TRANSCRIBER_PROVIDER", "openai")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        result = transcribe_audio(audio_path)
+
+        mock_openai.assert_called_once_with(
+            api_key="test-openai-key"  # pragma: allowlist secret
+        )
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 2
+
+    def test_transcribe_with_custom_model(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        """Test transcribing with custom model name."""
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+        monkeypatch.setenv("TRANSCRIBER_MODEL", "whisper-large-v3")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        transcribe_audio(audio_path)
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        assert call_kwargs["model"] == "whisper-large-v3"
+
+    def test_unknown_provider_raises_error(self, tmp_path, monkeypatch):
+        """Test that unknown provider raises ValueError."""
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+        monkeypatch.setenv("TRANSCRIBER_PROVIDER", "unsupported")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        with pytest.raises(ValueError, match="Unknown transcriber provider"):
+            transcribe_audio(audio_path)
+
+    def test_small_file_does_not_trigger_chunking(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        """Test that small file uses direct transcription without chunking."""
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        with patch("bilingualsub.core.transcriber.split_audio") as mock_split:
+            result = transcribe_audio(audio_path)
+
+        mock_split.assert_not_called()
+        assert isinstance(result, Subtitle)
+        assert len(result.entries) == 2

@@ -8,7 +8,12 @@
     "start_over": "重新開始",
     "downloads_title": "下載檔案",
     "downloads_desc": "您的影片已處理完成。您可以下載獨立字幕檔或已燒錄字幕的影片。",
-    "back_to_edit": "重新編輯字幕"
+    "back_to_edit": "重新編輯字幕",
+    "download_complete_title": "影片下載完成",
+    "download_complete_desc": "影片已下載完成，準備好產生字幕。",
+    "generate_subtitles": "產生字幕",
+    "subtitling_desc": "請稍候，我們正在產生字幕。",
+    "download_original_video": "下載原始影片"
   },
   "form": {
     "url_placeholder": "貼上 YouTube 影片網址",
