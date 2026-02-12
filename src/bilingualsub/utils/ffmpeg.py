@@ -1,5 +1,10 @@
 """FFmpeg utilities for burning subtitles into videos."""
 
+import json
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import ffmpeg
@@ -9,10 +14,32 @@ class FFmpegError(Exception):
     """Exception raised when FFmpeg operations fail."""
 
 
+def _parse_and_report_progress(
+    stream: Iterable[bytes],
+    *,
+    total_duration: float,
+    on_progress: Callable[[float], None],
+) -> None:
+    """Parse ffmpeg progress stream and emit percentage updates."""
+    for line in stream:
+        decoded = line.decode("utf-8", errors="replace").strip()
+        if not decoded.startswith("out_time_us="):
+            continue
+
+        try:
+            time_us = int(decoded.split("=")[1])
+            progress = min(time_us / (total_duration * 1_000_000) * 100, 99.0)
+            on_progress(progress)
+        except (ValueError, IndexError):
+            continue
+
+
 def burn_subtitles(
     video_path: Path,
     subtitle_path: Path,
     output_path: Path,
+    *,
+    on_progress: Callable[[float], None] | None = None,
 ) -> Path:
     """Burn subtitles into video.
 
@@ -20,6 +47,7 @@ def burn_subtitles(
         video_path: Input video file
         subtitle_path: Subtitle file (.srt or .ass)
         output_path: Output video file
+        on_progress: Optional callback for progress updates (0-100)
 
     Returns:
         Path to output video file
@@ -53,27 +81,83 @@ def burn_subtitles(
         # Use ass filter for ASS subtitles
         vf_filter = f"ass={subtitle_path}"
     else:
-        # Use subtitles filter for SRT subtitles
-        vf_filter = f"subtitles={subtitle_path}"
-
-    # Burn subtitles using ffmpeg
-    try:
-        (
-            ffmpeg.input(str(video_path))
-            .output(str(output_path), vf=vf_filter, acodec="copy")
-            .overwrite_output()
-            .run(capture_stdout=True, capture_stderr=True)
+        # Use subtitles filter for SRT subtitles with yellow text + black outline
+        force_style = (
+            "Fontname=Arial,Fontsize=16,"
+            "PrimaryColour=&H0000FFFF,"
+            "OutlineColour=&H00000000,"
+            "Outline=2,Shadow=0,"
+            "Alignment=2,MarginL=30,MarginR=30,MarginV=30"
         )
-    except Exception as e:
-        # Catch all exceptions from ffmpeg (ffmpeg.Error or any other error)
-        if hasattr(e, "stderr") and e.stderr:
-            stderr = e.stderr
-            error_message = (
-                stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+        vf_filter = f"subtitles={subtitle_path}:force_style='{force_style}'"
+
+    # Get video duration for progress calculation
+    metadata = extract_video_metadata(video_path)
+    total_duration = float(metadata["duration"])
+
+    # Determine encoder based on platform
+    if sys.platform == "darwin":
+        # macOS: use VideoToolbox hardware acceleration
+        encoder_args = ["-c:v", "h264_videotoolbox", "-b:v", "8M"]
+    else:
+        # Linux/other: use libx264 software encoder
+        encoder_args = ["-c:v", "libx264", "-crf", "23", "-preset", "medium"]
+
+    # Build ffmpeg command with platform-appropriate encoder
+    cmd = [
+        "ffmpeg",
+        "-i",
+        str(video_path),
+        "-vf",
+        vf_filter,
+        *encoder_args,
+        "-c:a",
+        "copy",
+        "-progress",
+        "pipe:1",
+        "-y",
+        str(output_path),
+    ]
+
+    # Only open stdout pipe when progress callback is enabled.
+    # Otherwise route stdout to DEVNULL to avoid filling PIPE buffers.
+    stdout_target: int = (
+        subprocess.PIPE
+        if on_progress is not None and total_duration > 0
+        else subprocess.DEVNULL
+    )
+
+    # Use a temporary file for stderr to prevent pipe buffer deadlock
+    with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stderr_file:
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=stdout_target,
+                stderr=stderr_file,
             )
-        else:
-            error_message = str(e)
-        raise FFmpegError(f"Failed to burn subtitles: {error_message}") from e
+
+            if process.stdout:
+                try:
+                    if on_progress is not None:
+                        _parse_and_report_progress(
+                            process.stdout,
+                            total_duration=total_duration,
+                            on_progress=on_progress,
+                        )
+                finally:
+                    close_stdout = getattr(process.stdout, "close", None)
+                    if callable(close_stdout):
+                        close_stdout()
+
+            returncode = process.wait()
+            if returncode != 0:
+                stderr_file.seek(0)
+                stderr_output = stderr_file.read().decode("utf-8", errors="replace")
+                raise FFmpegError(f"Failed to burn subtitles: {stderr_output}")
+        except FFmpegError:
+            raise
+        except Exception as e:
+            raise FFmpegError(f"Failed to burn subtitles: {e}") from e
 
     return output_path
 
@@ -122,3 +206,204 @@ def extract_audio(
         raise FFmpegError(f"Failed to extract audio: {error_message}") from e
 
     return output_path
+
+
+def trim_video(
+    video_path: Path,
+    output_path: Path,
+    start_time: float,
+    end_time: float,
+) -> Path:
+    """Trim video to specified time range using FFmpeg.
+
+    Args:
+        video_path: Input video file
+        output_path: Output trimmed video file
+        start_time: Start time in seconds
+        end_time: End time in seconds
+
+    Returns:
+        Path to output video file
+
+    Raises:
+        FFmpegError: If video file does not exist or ffmpeg fails
+    """
+    if not video_path.exists():
+        raise FFmpegError(f"Video file does not exist: {video_path}")
+    if not video_path.is_file():
+        raise FFmpegError(f"Video path is not a file: {video_path}")
+
+    try:
+        (
+            ffmpeg.input(str(video_path), ss=start_time, to=end_time)
+            .output(str(output_path), c="copy")
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except Exception as e:
+        if hasattr(e, "stderr") and e.stderr:
+            stderr = e.stderr
+            error_message = (
+                stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+            )
+        else:
+            error_message = str(e)
+        raise FFmpegError(f"Failed to trim video: {error_message}") from e
+
+    return output_path
+
+
+def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
+    """Extract video metadata using ffprobe.
+
+    Args:
+        video_path: Path to the video file
+
+    Returns:
+        Dict with keys: title, duration, width, height, fps
+
+    Raises:
+        FFmpegError: If ffprobe fails or no video stream found
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        str(video_path),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise FFmpegError(f"ffprobe failed for {video_path}: {e}") from e
+
+    data = json.loads(result.stdout)
+
+    # Find video stream
+    video_stream = None
+    for stream in data.get("streams", []):
+        if stream.get("codec_type") == "video":
+            video_stream = stream
+            break
+
+    if not video_stream:
+        raise FFmpegError(f"No video stream found in {video_path}")
+
+    try:
+        title = data.get("format", {}).get("tags", {}).get("title", video_path.stem)
+        duration = float(data.get("format", {}).get("duration", 0))
+        width = int(video_stream.get("width", 0))
+        height = int(video_stream.get("height", 0))
+
+        # Parse FPS from r_frame_rate (e.g., "30/1" or "30000/1001")
+        fps_str = video_stream.get("r_frame_rate", "0/1")
+        num, denom = fps_str.split("/")
+        fps = float(num) / float(denom) if float(denom) > 0 else 0.0
+    except (KeyError, ValueError, ZeroDivisionError) as e:
+        raise FFmpegError(f"Failed to parse metadata: {e}") from e
+
+    return {
+        "title": title,
+        "duration": duration,
+        "width": width,
+        "height": height,
+        "fps": fps,
+    }
+
+
+def get_audio_duration(audio_path: Path) -> float:
+    """Get audio duration in seconds using ffprobe.
+
+    Args:
+        audio_path: Path to the audio file
+
+    Returns:
+        Duration in seconds
+
+    Raises:
+        FFmpegError: If ffprobe fails or duration is missing
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        str(audio_path),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        raise FFmpegError(f"ffprobe failed for {audio_path}: {e}") from e
+
+    data = json.loads(result.stdout)
+
+    try:
+        return float(data["format"]["duration"])
+    except (KeyError, ValueError, TypeError) as e:
+        raise FFmpegError(f"Failed to get duration from {audio_path}: {e}") from e
+
+
+def split_audio(
+    audio_path: Path,
+    output_dir: Path,
+    chunk_duration: float = 1500.0,
+) -> list[tuple[Path, float]]:
+    """Split audio into chunks.
+
+    Args:
+        audio_path: Path to the audio file
+        output_dir: Directory for output chunks
+        chunk_duration: Maximum chunk duration in seconds (default 25 min)
+
+    Returns:
+        List of (chunk_path, time_offset_seconds) tuples
+
+    Raises:
+        FFmpegError: If ffmpeg/ffprobe fails
+        ValueError: If audio file does not exist
+    """
+    if not audio_path.exists():
+        raise ValueError(f"Audio file does not exist: {audio_path}")
+    if not audio_path.is_file():
+        raise ValueError(f"Audio path is not a file: {audio_path}")
+
+    total_duration = get_audio_duration(audio_path)
+    chunks: list[tuple[Path, float]] = []
+    offset = 0.0
+    chunk_idx = 0
+
+    while offset < total_duration:
+        chunk_path = (
+            output_dir / f"{audio_path.stem}_chunk{chunk_idx}{audio_path.suffix}"
+        )
+        duration = min(chunk_duration, total_duration - offset)
+
+        try:
+            (
+                ffmpeg.input(str(audio_path), ss=offset, t=duration)
+                .output(str(chunk_path), acodec="copy")
+                .overwrite_output()
+                .run(capture_stdout=True, capture_stderr=True)
+            )
+        except Exception as e:
+            if hasattr(e, "stderr") and e.stderr:
+                stderr = e.stderr
+                error_message = (
+                    stderr.decode() if isinstance(stderr, bytes) else str(stderr)
+                )
+            else:
+                error_message = str(e)
+            raise FFmpegError(f"Failed to split audio: {error_message}") from e
+
+        chunks.append((chunk_path, offset))
+        offset += chunk_duration
+        chunk_idx += 1
+
+    return chunks

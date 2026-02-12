@@ -79,7 +79,14 @@ downloads/
 node_modules/
 .pnpm-store/
 .next/
+.vite/
 out/
+
+# Vite
+frontend/.vite/
+
+# Claude Code
+.claude/settings.local.json
 
 # Logs
 *.log

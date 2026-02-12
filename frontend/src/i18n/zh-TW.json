@@ -1,0 +1,119 @@
+{
+  "app": {
+    "title": "BilingualSub",
+    "subtitle": "YouTube 雙語字幕自動生成工具",
+    "processing_title": "影片處理中",
+    "processing_desc": "請稍候，我們正在進行語音辨識與翻譯。",
+    "error_title": "發生錯誤",
+    "start_over": "重新開始",
+    "downloads_title": "下載檔案",
+    "downloads_desc": "您的影片已處理完成。您可以下載獨立字幕檔或已燒錄字幕的影片。",
+    "back_to_edit": "重新編輯字幕",
+    "download_complete_title": "影片下載完成",
+    "download_complete_desc": "影片已下載完成，準備好產生字幕。",
+    "generate_subtitles": "產生字幕",
+    "subtitling_desc": "請稍候，我們正在產生字幕。",
+    "download_original_video": "下載原始影片",
+    "download_audio": "下載音訊"
+  },
+  "form": {
+    "url_placeholder": "貼上 YouTube 影片網址",
+    "paste_placeholder": "貼上 YouTube 網址...",
+    "source_lang": "原始語言",
+    "target_lang": "翻譯語言",
+    "label_translate": "翻譯語言",
+    "label_range": "時間範圍",
+    "submit": "開始生成",
+    "start_processing": "開始處理",
+    "submitting": "提交中...",
+    "startTime": "開始時間",
+    "endTime": "結束時間",
+    "timePlaceholder": "00:00:00",
+    "timeFormatHint": "格式：HH:MM:SS（選填）",
+    "enable_range": "設定範圍",
+    "disable_range": "取消範圍",
+    "clear_range": "清除",
+    "inputModeUrl": "YouTube 網址",
+    "inputModeFile": "上傳檔案",
+    "filePlaceholder": "選擇影片或音訊檔案",
+    "fileSelected": "已選擇：{{filename}}"
+  },
+  "lang": {
+    "en": "英文",
+    "zh-TW": "繁體中文",
+    "ja": "日文",
+    "ko": "韓文"
+  },
+  "progress": {
+    "pending": "等待中",
+    "downloading": "下載影片中...",
+    "transcribing": "語音辨識中...",
+    "translating": "翻譯字幕中...",
+    "merging": "合併字幕中...",
+    "burning": "燒錄字幕中...",
+    "completed": "完成！",
+    "failed": "處理失敗"
+  },
+  "download": {
+    "title": "下載結果",
+    "srt": "下載 SRT 字幕",
+    "ass": "下載 ASS 字幕",
+    "video": "下載燒錄影片",
+    "audio": "下載音訊檔"
+  },
+  "preview": {
+    "title": "影片預覽",
+    "unsupported": "您的瀏覽器不支援影片播放"
+  },
+  "error": {
+    "invalid_url": "請輸入有效的 YouTube 網址",
+    "job_not_found": "找不到此任務",
+    "download_failed": "影片下載失敗",
+    "transcription_failed": "語音辨識失敗",
+    "translation_failed": "翻譯失敗",
+    "pipeline_failed": "處理過程發生錯誤",
+    "network_error": "網路連線錯誤",
+    "unknown_error": "發生未知錯誤",
+    "invalidTimeFormat": "時間格式不正確",
+    "invalidTimeRange": "結束時間必須大於開始時間"
+  },
+  "language_switcher": {
+    "label": "語言"
+  },
+  "editor": {
+    "title": "SRT 校閱",
+    "loading": "載入字幕中...",
+    "loadError": "載入字幕失敗",
+    "empty": "沒有找到字幕項目",
+    "reset": "重置",
+    "download": "下載已編輯 SRT",
+    "retranslate": "局部重翻",
+    "retranslating": "重翻中...",
+    "retranslateHint": "已選 {{count}} 段，可局部重翻並附加上下文。",
+    "retranslateContextPlaceholder": "補充上下文（選填）：例如人名、術語、語氣",
+    "retranslateFailed": "局部重翻失敗",
+    "selectForRetranslate": "選取以局部重翻",
+    "retranslatePreviewTitle": "局部重翻預覽（{{count}} 段）",
+    "retranslatePreviewDiscard": "取消",
+    "retranslatePreviewApply": "套用重翻",
+    "retranslatePreviewChooseAllBefore": "全部保留重翻前",
+    "retranslatePreviewChooseAllAfter": "全部採用重翻後",
+    "retranslateBefore": "重翻前",
+    "retranslateAfter": "重翻後",
+    "unsavedHint": "您有未儲存的編輯，點擊下載以儲存。",
+    "segments_label": "句段",
+    "audioHint": "點擊字幕可跳轉播放對應音訊",
+    "videoHint": "點擊字幕可跳轉播放對應位置",
+    "burn": "燒錄字幕",
+    "burning": "燒錄中...",
+    "deleteEntry": "刪除字幕"
+  },
+  "disclaimer": {
+    "title": "下載前請閱讀",
+    "tool_desc": "BilingualSub 是一款開源的雙語字幕生成工具，旨在協助語言學習與跨語言內容理解。",
+    "copyright_title": "著作權聲明",
+    "copyright_desc": "本工具產生的字幕僅供個人學習與研究使用。請尊重原始內容的著作權，勿將下載內容用於商業用途或未經授權的散布。使用者需自行承擔使用本工具所產生的一切法律責任。",
+    "cancel": "取消",
+    "confirm": "我了解，開始下載"
+  }
+}

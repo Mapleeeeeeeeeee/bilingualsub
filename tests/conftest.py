@@ -1,7 +1,7 @@
 """Pytest configuration and shared fixtures."""
 
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

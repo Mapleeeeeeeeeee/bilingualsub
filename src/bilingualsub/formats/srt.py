@@ -43,7 +43,8 @@ def parse_srt(content: str) -> Subtitle:
             index = int(lines[0].strip())
         except ValueError as e:
             raise SRTParseError(
-                f"Block {block_num}: Invalid index '{lines[0].strip()}', must be integer"
+                f"Block {block_num}: Invalid index '{lines[0].strip()}', "
+                "must be integer"
             ) from e
 
         # Parse timing line
@@ -116,10 +117,9 @@ def serialize_srt(subtitle: Subtitle) -> str:
         end_seconds = total_end_seconds % 60
         end_millis = entry.end.microseconds // 1000
 
-        timing = (
-            f"{start_hours:02d}:{start_minutes:02d}:{start_seconds:02d},{start_millis:03d} --> "
-            f"{end_hours:02d}:{end_minutes:02d}:{end_seconds:02d},{end_millis:03d}"
-        )
+        start_str = f"{start_hours:02d}:{start_minutes:02d}:{start_seconds:02d}"
+        end_str = f"{end_hours:02d}:{end_minutes:02d}:{end_seconds:02d}"
+        timing = f"{start_str},{start_millis:03d} --> {end_str},{end_millis:03d}"
 
         # Build block
         block = f"{entry.index}\n{timing}\n{entry.text}"

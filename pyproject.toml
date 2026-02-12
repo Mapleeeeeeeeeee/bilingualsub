@@ -18,7 +18,7 @@ classifiers = [
 
 dependencies = [
     "yt-dlp>=2024.0.0",
-    "faster-whisper>=1.0.0",
+    "groq>=0.11.0",
     "agno>=1.0.0",
     "ffmpeg-python>=0.2.0",
     "typer>=0.12.0",
@@ -26,6 +26,13 @@ dependencies = [
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
     "httpx>=0.27.0",
+    "structlog>=24.0.0",
+    "fastapi>=0.115.0",
+    "sse-starlette>=2.0.0",
+    "uvicorn[standard]>=0.30.0",
+    "ollama>=0.6.1",
+    "openai>=2.17.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.optional-dependencies]
@@ -40,18 +47,16 @@ dev = [
     "respx>=0.21.0",
     "vulture>=2.11",
     "pip-audit>=2.7.0",
+    "bandit>=1.7.0",
 ]
 e2e = [
     "playwright>=1.44.0",
     "pytest-playwright>=0.5.0",
 ]
 
-[project.scripts]
-bilingualsub = "bilingualsub.cli:app"
-
 [project.urls]
-Homepage = "https://github.com/user/bilingualsub"
-Repository = "https://github.com/user/bilingualsub"
+Homepage = "https://github.com/Mapleeeeeeeeeee/bilingualsub"
+Repository = "https://github.com/Mapleeeeeeeeeee/bilingualsub"
 
 [build-system]
 requires = ["hatchling"]
@@ -88,13 +93,21 @@ select = [
 ignore = [
     "PLR0913",  # Too many arguments
     "PLR2004",  # Magic value comparison
+    "PLR0912",  # Too many branches
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["bilingualsub"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ARG", "PLR2004"]
+"src/bilingualsub/api/app.py" = ["E402"]  # load_dotenv() must run before other imports
+"tests/**/*.py" = [
+    "ARG",     # Unused function argument (common in parametrized tests)
+    "PLR2004", # Magic value comparison
+    "RUF001",  # Ambiguous unicode chars (Chinese chars in test data)
+    "RUF043",  # Regex patterns in match= (normal pytest usage)
+    "E501",    # Line too long (long docstrings in BDD tests)
+]
 
 # ============================================================
 # Mypy - Static Type Checking
@@ -118,8 +131,10 @@ ignore_missing_imports = false
 [[tool.mypy.overrides]]
 module = [
     "yt_dlp.*",
-    "faster_whisper.*",
+    "groq.*",
+    "agno.*",
     "ffmpeg.*",
+    "openai.*",
 ]
 ignore_missing_imports = true
 
@@ -144,6 +159,8 @@ markers = [
     "integration: Integration tests (may use real dependencies)",
     "e2e: End-to-end tests (full workflow)",
     "slow: Slow tests (skipped by default)",
+    "subtitle_only: Subtitle generation tests (no FFmpeg required)",
+    "burn_in: Video burn-in tests (requires FFmpeg)",
 ]
 filterwarnings = [
     "error",
@@ -173,3 +190,11 @@ min_confidence = 80
 paths = ["src/bilingualsub"]
 exclude = ["tests/", "*/__pycache__/"]
 sort_by_size = true
+
+# ============================================================
+# Bandit - Security Vulnerability Scanner
+# ============================================================
+[tool.bandit]
+targets = ["src/bilingualsub"]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]  # Skip assert warnings (used in tests)
