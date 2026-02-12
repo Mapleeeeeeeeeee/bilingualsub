@@ -170,13 +170,22 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
 
+      - name: Require GROQ_API_KEY on main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "GROQ_API_KEY secret is required for main E2E validation."
+            exit 1
+          fi
+
       - name: Run E2E tests
         run: |
           uv run pytest tests/e2e \
             -m "e2e" \
             --cov-fail-under=0
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ENABLE_YOUTUBE_E2E: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
 
   # ===========================================
   # Security Scan
