@@ -26,14 +26,20 @@ class TestBurnSubtitles:
             patch(
                 "bilingualsub.utils.ffmpeg.extract_video_metadata"
             ) as mock_extract_metadata,
+            patch(
+                "bilingualsub.utils.ffmpeg.tempfile.SpooledTemporaryFile"
+            ) as mock_stderr_file,
         ):
             # Mock process object
             mock_process = MagicMock()
             mock_process.stdout = []  # Empty stdout by default (no progress lines)
-            mock_process.stderr = MagicMock()
-            mock_process.stderr.read.return_value = b""
             mock_process.wait.return_value = 0  # Success
             mock_popen.return_value = mock_process
+
+            # Mock stderr file
+            mock_file = MagicMock()
+            mock_file.read.return_value = b""
+            mock_stderr_file.return_value.__enter__.return_value = mock_file
 
             # Mock metadata with duration
             mock_extract_metadata.return_value = {
@@ -44,7 +50,11 @@ class TestBurnSubtitles:
                 "title": "test video",
             }
 
-            yield {"popen": mock_popen, "extract_metadata": mock_extract_metadata}
+            yield {
+                "popen": mock_popen,
+                "extract_metadata": mock_extract_metadata,
+                "stderr_file": mock_stderr_file,
+            }
 
     @pytest.mark.parametrize(
         ("subtitle_format", "expected_filter"),
@@ -236,7 +246,11 @@ class TestBurnSubtitles:
         mock_popen = mock_ffmpeg["popen"]
         mock_process = mock_popen.return_value
         mock_process.wait.return_value = 1  # Non-zero exit code
-        mock_process.stderr.read.return_value = b"Codec not found"
+
+        # Mock stderr file to return error message
+        mock_stderr_file = mock_ffmpeg["stderr_file"]
+        mock_file = mock_stderr_file.return_value.__enter__.return_value
+        mock_file.read.return_value = b"Codec not found"
 
         with pytest.raises(
             FFmpegError, match=r"Failed to burn subtitles.*Codec not found"
@@ -260,7 +274,11 @@ class TestBurnSubtitles:
         mock_popen = mock_ffmpeg["popen"]
         mock_process = mock_popen.return_value
         mock_process.wait.return_value = 1  # Non-zero exit code
-        mock_process.stderr.read.return_value = b""
+
+        # Mock stderr file to return empty message
+        mock_stderr_file = mock_ffmpeg["stderr_file"]
+        mock_file = mock_stderr_file.return_value.__enter__.return_value
+        mock_file.read.return_value = b""
 
         with pytest.raises(FFmpegError, match=r"Failed to burn subtitles"):
             burn_subtitles(video_path, subtitle_path, output_path)
@@ -403,6 +421,81 @@ class TestBurnSubtitles:
         # Progress should be ~50% (5 seconds out of 10)
         assert 49.0 <= progress_calls[0] <= 51.0
         assert result == output_path
+
+    @pytest.mark.unit
+    def test_when_on_darwin_then_uses_videotoolbox_encoder(self, tmp_path, mock_ffmpeg):
+        """Given macOS platform, when burning, then uses h264_videotoolbox encoder."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video")
+
+        subtitle_path = tmp_path / "subtitle.srt"
+        subtitle_path.write_bytes(b"fake subtitle")
+
+        output_path = tmp_path / "output.mp4"
+
+        with patch("bilingualsub.utils.ffmpeg.sys.platform", "darwin"):
+            burn_subtitles(video_path, subtitle_path, output_path)
+
+        # Verify command uses VideoToolbox encoder
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+
+        assert "-c:v" in cmd
+        c_v_idx = cmd.index("-c:v")
+        assert cmd[c_v_idx + 1] == "h264_videotoolbox"
+        assert "-b:v" in cmd
+        b_v_idx = cmd.index("-b:v")
+        assert cmd[b_v_idx + 1] == "8M"
+
+    @pytest.mark.unit
+    def test_when_on_linux_then_uses_libx264_encoder(self, tmp_path, mock_ffmpeg):
+        """Given Linux platform, when burning, then uses libx264 encoder."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video")
+
+        subtitle_path = tmp_path / "subtitle.srt"
+        subtitle_path.write_bytes(b"fake subtitle")
+
+        output_path = tmp_path / "output.mp4"
+
+        with patch("bilingualsub.utils.ffmpeg.sys.platform", "linux"):
+            burn_subtitles(video_path, subtitle_path, output_path)
+
+        # Verify command uses libx264 encoder
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+
+        assert "-c:v" in cmd
+        c_v_idx = cmd.index("-c:v")
+        assert cmd[c_v_idx + 1] == "libx264"
+        assert "-crf" in cmd
+        crf_idx = cmd.index("-crf")
+        assert cmd[crf_idx + 1] == "23"
+        assert "-preset" in cmd
+        preset_idx = cmd.index("-preset")
+        assert cmd[preset_idx + 1] == "medium"
+
+    @pytest.mark.unit
+    def test_when_on_windows_then_uses_libx264_encoder(self, tmp_path, mock_ffmpeg):
+        """Given Windows platform, when burning, then uses libx264 encoder."""
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"fake video")
+
+        subtitle_path = tmp_path / "subtitle.srt"
+        subtitle_path.write_bytes(b"fake subtitle")
+
+        output_path = tmp_path / "output.mp4"
+
+        with patch("bilingualsub.utils.ffmpeg.sys.platform", "win32"):
+            burn_subtitles(video_path, subtitle_path, output_path)
+
+        # Verify command uses libx264 encoder (fallback)
+        mock_popen = mock_ffmpeg["popen"]
+        cmd = mock_popen.call_args[0][0]
+
+        assert "-c:v" in cmd
+        c_v_idx = cmd.index("-c:v")
+        assert cmd[c_v_idx + 1] == "libx264"
 
 
 class TestExtractAudio:

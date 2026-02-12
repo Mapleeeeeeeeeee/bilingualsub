@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -73,17 +75,22 @@ def burn_subtitles(
     metadata = extract_video_metadata(video_path)
     total_duration = float(metadata["duration"])
 
-    # Build ffmpeg command with VideoToolbox hardware acceleration
+    # Determine encoder based on platform
+    if sys.platform == "darwin":
+        # macOS: use VideoToolbox hardware acceleration
+        encoder_args = ["-c:v", "h264_videotoolbox", "-b:v", "8M"]
+    else:
+        # Linux/other: use libx264 software encoder
+        encoder_args = ["-c:v", "libx264", "-crf", "23", "-preset", "medium"]
+
+    # Build ffmpeg command with platform-appropriate encoder
     cmd = [
         "ffmpeg",
         "-i",
         str(video_path),
         "-vf",
         vf_filter,
-        "-c:v",
-        "h264_videotoolbox",
-        "-b:v",
-        "8M",
+        *encoder_args,
         "-c:a",
         "copy",
         "-progress",
@@ -92,38 +99,37 @@ def burn_subtitles(
         str(output_path),
     ]
 
-    try:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        if process.stdout and on_progress and total_duration > 0:
-            for line in process.stdout:
-                decoded = line.decode("utf-8", errors="replace").strip()
-                if decoded.startswith("out_time_us="):
-                    try:
-                        time_us = int(decoded.split("=")[1])
-                        progress = min(
-                            time_us / (total_duration * 1_000_000) * 100, 99.0
-                        )
-                        on_progress(progress)
-                    except (ValueError, IndexError):
-                        pass
-
-        returncode = process.wait()
-        if returncode != 0:
-            stderr_output = (
-                process.stderr.read().decode("utf-8", errors="replace")
-                if process.stderr
-                else ""
+    # Use a temporary file for stderr to prevent pipe buffer deadlock
+    with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stderr_file:
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=stderr_file,
             )
-            raise FFmpegError(f"Failed to burn subtitles: {stderr_output}")
-    except FFmpegError:
-        raise
-    except Exception as e:
-        raise FFmpegError(f"Failed to burn subtitles: {e}") from e
+
+            if process.stdout and on_progress and total_duration > 0:
+                for line in process.stdout:
+                    decoded = line.decode("utf-8", errors="replace").strip()
+                    if decoded.startswith("out_time_us="):
+                        try:
+                            time_us = int(decoded.split("=")[1])
+                            progress = min(
+                                time_us / (total_duration * 1_000_000) * 100, 99.0
+                            )
+                            on_progress(progress)
+                        except (ValueError, IndexError):
+                            pass
+
+            returncode = process.wait()
+            if returncode != 0:
+                stderr_file.seek(0)
+                stderr_output = stderr_file.read().decode("utf-8", errors="replace")
+                raise FFmpegError(f"Failed to burn subtitles: {stderr_output}")
+        except FFmpegError:
+            raise
+        except Exception as e:
+            raise FFmpegError(f"Failed to burn subtitles: {e}") from e
 
     return output_path
 

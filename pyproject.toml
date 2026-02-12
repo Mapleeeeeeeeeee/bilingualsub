@@ -3,7 +3,7 @@ name = "bilingualsub"
 version = "0.1.0"
 description = "YouTube bilingual subtitle generator with LLM translation"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 authors = [{ name = "BilingualSub Team" }]
 keywords = ["youtube", "subtitle", "translation", "whisper", "llm"]

@@ -73,8 +73,8 @@ export function isValidSrtTime(value: string): boolean {
     return false;
   }
 
-  const [hms, ms] = value.split(',');
-  const [h, m, s] = hms.split(':').map(Number);
+  const [hms] = value.split(',');
+  const [, m, s] = hms.split(':').map(Number);
 
   return m >= 0 && m <= 59 && s >= 0 && s <= 59;
 }

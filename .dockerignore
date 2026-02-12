@@ -35,5 +35,6 @@ tests/
 
 # Misc
 *.md
+!README.md
 *.log
 run_demo*.py
