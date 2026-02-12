@@ -79,6 +79,7 @@ downloads/
 node_modules/
 .pnpm-store/
 .next/
+.vite/
 out/
 
 # Vite
