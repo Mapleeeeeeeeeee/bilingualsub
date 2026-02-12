@@ -2,8 +2,6 @@ name: Live E2E Canary
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
