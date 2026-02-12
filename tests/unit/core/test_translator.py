@@ -16,6 +16,15 @@ from bilingualsub.core.translator import (
 from bilingualsub.utils.config import get_settings
 
 
+@pytest.fixture(autouse=True)
+def set_fake_groq_api_key(monkeypatch):
+    """Translator unit tests should not depend on local .env secrets."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-fake-key")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 class TestTranslateSubtitle:
     """Test cases for translate_subtitle function."""
 
