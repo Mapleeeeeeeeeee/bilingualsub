@@ -1,0 +1,71 @@
+name: Live E2E Canary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_CACHE_DIR: /tmp/.uv-cache
+
+jobs:
+  live-e2e:
+    name: Live E2E (YouTube + Groq)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies (with e2e)
+        run: uv sync --extra dev --extra e2e
+
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
+      - name: Require canary secrets
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "GROQ_API_KEY secret is required for live canary."
+            exit 1
+          fi
+          if [ -z "${{ secrets.YOUTUBE_COOKIES }}" ]; then
+            echo "YOUTUBE_COOKIES secret is required for live canary."
+            exit 1
+          fi
+
+      - name: Write YouTube cookies file
+        run: |
+          cat > /tmp/youtube-cookies.txt <<'EOF'
+          ${{ secrets.YOUTUBE_COOKIES }}
+          EOF
+          chmod 600 /tmp/youtube-cookies.txt
+
+      - name: Run live E2E tests
+        run: |
+          uv run pytest tests/e2e \
+            -m "e2e" \
+            --cov-fail-under=0
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          ENABLE_YOUTUBE_E2E: "1"
+          YTDLP_COOKIE_FILE: /tmp/youtube-cookies.txt
+
+      - name: Clean up cookies
+        if: always()
+        run: rm -f /tmp/youtube-cookies.txt
