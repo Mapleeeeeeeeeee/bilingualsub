@@ -3,6 +3,7 @@ FROM python:3.11-slim AS base
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    fonts-noto-cjk \
     curl \
     nodejs \
     npm \
