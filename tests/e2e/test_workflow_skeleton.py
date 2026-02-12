@@ -297,7 +297,6 @@ class TestWorkflowEdgeCases:
         with pytest.raises((ValueError, DownloadError)):
             download_youtube_video("https://invalid-url.com/video", output_path)
 
-    @requires_api_key
     def test_missing_api_key_raises_error(self, tmp_path: Path, monkeypatch) -> None:
         """Test that missing API key raises appropriate error."""
         get_settings.cache_clear()
