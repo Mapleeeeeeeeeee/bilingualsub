@@ -133,7 +133,8 @@ jobs:
           uv run pytest tests/integration \
             -m "integration" \
             --cov=bilingualsub \
-            --cov-report=xml
+            --cov-report=xml \
+            --cov-fail-under=30
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
