@@ -1,6 +1,7 @@
 """YouTube video downloader with metadata extraction."""
 
 import json
+import os
 import shutil
 import subprocess  # nosec B404
 from collections.abc import Callable
@@ -188,6 +189,14 @@ def _download_video(
             "no_warnings": True,
             "progress_hooks": [_progress_hook],
         }
+
+    # Optional: allow authenticated downloads for environments affected by
+    # YouTube anti-bot checks.
+    cookie_file = os.getenv("YTDLP_COOKIE_FILE")
+    if cookie_file:
+        cookie_path = Path(cookie_file).expanduser()
+        if cookie_path.is_file():
+            ydl_opts["cookiefile"] = str(cookie_path)
 
     # Add download range if time range is specified
     if start_time is not None or end_time is not None:

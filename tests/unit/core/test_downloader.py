@@ -526,6 +526,41 @@ class TestDownloadYoutubeVideo:
         assert not (tmp_path / "video.mp4").exists()
         assert metadata.title == "Test Video"
 
+    def test_download_uses_cookie_file_when_env_is_set(
+        self, tmp_path, mock_yt_dlp, mock_subprocess, valid_ffprobe_output, monkeypatch
+    ):
+        """Test yt-dlp receives cookiefile option when configured."""
+        output_path = tmp_path / "video.mp4"
+        cookie_file = tmp_path / "youtube-cookies.txt"
+        cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+        monkeypatch.setenv("YTDLP_COOKIE_FILE", str(cookie_file))
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        mock_result = Mock()
+        mock_result.stdout = valid_ffprobe_output
+        mock_subprocess.run.return_value = mock_result
+
+        download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
+        )
+
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert ydl_opts["cookiefile"] == str(cookie_file)
+
     @pytest.mark.unit
     def test_all_youtube_url_formats_accepted(self, tmp_path):
         """Test that all common YouTube URL formats are accepted."""
