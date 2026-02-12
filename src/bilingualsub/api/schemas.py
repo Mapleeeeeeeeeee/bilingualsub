@@ -64,6 +64,55 @@ class BurnRequest(BaseModel):
     srt_content: str
 
 
+class StartSubtitleRequest(BaseModel):
+    """Request body for subtitle generation trigger."""
+
+    source_lang: str | None = None
+    target_lang: str | None = None
+
+
+class PartialRetranslateEntry(BaseModel):
+    """A subtitle entry used for partial re-translation."""
+
+    index: int
+    original: str
+    translated: str = ""
+
+
+class PartialRetranslateRequest(BaseModel):
+    """Request body for partial re-translation."""
+
+    selected_indices: list[int]
+    entries: list[PartialRetranslateEntry]
+    user_context: str | None = None
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> Self:
+        if not self.selected_indices:
+            raise ValueError("selected_indices cannot be empty")
+        if not self.entries:
+            raise ValueError("entries cannot be empty")
+
+        known = {entry.index for entry in self.entries}
+        missing = [idx for idx in self.selected_indices if idx not in known]
+        if missing:
+            raise ValueError(f"selected_indices not found in entries: {missing}")
+        return self
+
+
+class PartialRetranslateItem(BaseModel):
+    """Single re-translated item."""
+
+    index: int
+    translated: str
+
+
+class PartialRetranslateResponse(BaseModel):
+    """Response body for partial re-translation."""
+
+    results: list[PartialRetranslateItem]
+
+
 class SSEProgressData(BaseModel):
     """Payload sent in SSE progress events."""
 

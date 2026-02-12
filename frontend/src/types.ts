@@ -49,6 +49,27 @@ export interface JobUploadRequest {
   end_time?: number;
 }
 
+export interface RetranslateEntryPayload {
+  index: number;
+  original: string;
+  translated: string;
+}
+
+export interface PartialRetranslateRequest {
+  selected_indices: number[];
+  entries: RetranslateEntryPayload[];
+  user_context?: string;
+}
+
+export interface PartialRetranslateResult {
+  index: number;
+  translated: string;
+}
+
+export interface PartialRetranslateResponse {
+  results: PartialRetranslateResult[];
+}
+
 export interface SrtEntry {
   index: number;
   startTime: string; // "HH:MM:SS,mmm"

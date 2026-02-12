@@ -276,6 +276,8 @@ async def run_download(job: Job) -> None:
         # Save metadata for subtitle phase
         job.video_width = metadata.width
         job.video_height = metadata.height
+        job.video_title = metadata.title
+        job.video_description = metadata.description
         job.output_files[FileType.SOURCE_VIDEO] = video_path
 
         _send_download_complete(job)
@@ -326,6 +328,8 @@ async def run_subtitle(job: Job) -> None:
             original_sub,
             source_lang=job.source_lang,
             target_lang=job.target_lang,
+            video_title=job.video_title,
+            video_description=job.video_description,
             on_progress=_on_translate_progress,
             on_rate_limit=_on_rate_limit,
         )
@@ -427,6 +431,8 @@ async def run_pipeline(job: Job) -> None:
             original_sub,
             source_lang=job.source_lang,
             target_lang=job.target_lang,
+            video_title=metadata.title,
+            video_description=metadata.description,
             on_progress=_on_translate_progress,
             on_rate_limit=_on_rate_limit,
         )

@@ -8,10 +8,16 @@ from bilingualsub.core.downloader import (
 from bilingualsub.core.merger import merge_subtitles
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.transcriber import TranscriptionError, transcribe_audio
-from bilingualsub.core.translator import TranslationError, translate_subtitle
+from bilingualsub.core.translator import (
+    RetranslateEntry,
+    TranslationError,
+    retranslate_entries,
+    translate_subtitle,
+)
 
 __all__ = [
     "DownloadError",
+    "RetranslateEntry",
     "Subtitle",
     "SubtitleEntry",
     "TranscriptionError",
@@ -19,6 +25,7 @@ __all__ = [
     "VideoMetadata",
     "download_youtube_video",
     "merge_subtitles",
+    "retranslate_entries",
     "transcribe_audio",
     "translate_subtitle",
 ]

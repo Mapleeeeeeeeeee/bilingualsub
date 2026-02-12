@@ -4,6 +4,8 @@ import type {
   JobCreateResponse,
   JobStatusResponse,
   JobUploadRequest,
+  PartialRetranslateRequest,
+  PartialRetranslateResponse,
   SSEHandlers,
 } from '../types';
 import { ApiError } from './errors';
@@ -98,9 +100,19 @@ class ApiClient {
     return response.text();
   }
 
-  async startSubtitle(jobId: string): Promise<{ status: string }> {
+  async startSubtitle(
+    jobId: string,
+    sourceLang?: string,
+    targetLang?: string
+  ): Promise<{ status: string }> {
+    const payload: { source_lang?: string; target_lang?: string } = {};
+    if (sourceLang) payload.source_lang = sourceLang;
+    if (targetLang) payload.target_lang = targetLang;
+
     const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/subtitle`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw await ApiError.fromResponse(response);
     return response.json();
@@ -111,6 +123,19 @@ class ApiClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ srt_content: srtContent }),
+    });
+    if (!response.ok) throw await ApiError.fromResponse(response);
+    return response.json();
+  }
+
+  async partialRetranslate(
+    jobId: string,
+    payload: PartialRetranslateRequest
+  ): Promise<PartialRetranslateResponse> {
+    const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/retranslate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw await ApiError.fromResponse(response);
     return response.json();

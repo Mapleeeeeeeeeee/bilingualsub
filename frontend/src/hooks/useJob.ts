@@ -160,33 +160,36 @@ export function useJob() {
     [cleanup]
   );
 
-  const subtitleJob = useCallback(async () => {
-    if (!state.jobId) return;
-    dispatch({ type: 'SUBTITLE_START' });
-    try {
-      await apiClient.startSubtitle(state.jobId);
-      // Reconnect SSE if the previous connection was closed
-      if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
-        eventSourceRef.current = apiClient.connectSSE(state.jobId, {
-          onProgress: data => dispatch({ type: 'PROGRESS', data }),
-          onComplete: () => {
-            dispatch({ type: 'COMPLETE' });
-            cleanup();
-          },
-          onError: error => {
-            dispatch({ type: 'ERROR', error });
-            cleanup();
-          },
-        });
+  const subtitleJob = useCallback(
+    async (sourceLang?: string, targetLang?: string) => {
+      if (!state.jobId) return;
+      dispatch({ type: 'SUBTITLE_START' });
+      try {
+        await apiClient.startSubtitle(state.jobId, sourceLang, targetLang);
+        // Reconnect SSE if the previous connection was closed
+        if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
+          eventSourceRef.current = apiClient.connectSSE(state.jobId, {
+            onProgress: data => dispatch({ type: 'PROGRESS', data }),
+            onComplete: () => {
+              dispatch({ type: 'COMPLETE' });
+              cleanup();
+            },
+            onError: error => {
+              dispatch({ type: 'ERROR', error });
+              cleanup();
+            },
+          });
+        }
+      } catch (err) {
+        const error =
+          err instanceof Error
+            ? { code: 'subtitle_error', message: err.message }
+            : { code: 'unknown_error', message: 'An unknown error occurred' };
+        dispatch({ type: 'ERROR', error });
       }
-    } catch (err) {
-      const error =
-        err instanceof Error
-          ? { code: 'subtitle_error', message: err.message }
-          : { code: 'unknown_error', message: 'An unknown error occurred' };
-      dispatch({ type: 'ERROR', error });
-    }
-  }, [state.jobId, cleanup]);
+    },
+    [state.jobId, cleanup]
+  );
 
   const burnJob = useCallback(
     async (srtContent: string) => {

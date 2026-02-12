@@ -7,8 +7,10 @@ import pytest
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.translator import (
+    RetranslateEntry,
     TranslationError,
     _parse_batch_response,
+    retranslate_entries,
     translate_subtitle,
 )
 from bilingualsub.utils.config import get_settings
@@ -649,3 +651,71 @@ class TestTranslationOverlap:
             # First (and only) batch prompt should NOT contain lookahead
             prompt = mock_translator.run.call_args_list[0][0][0]
             assert "下文參考" not in prompt
+
+
+@pytest.mark.unit
+class TestTranslationMetadataAndPartial:
+    @pytest.fixture(autouse=True)
+    def clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    def test_translate_subtitle_includes_video_metadata_in_system_prompt(self):
+        entries = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=1),
+                text="Hello",
+            )
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "1. 你好"
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(
+                subtitle,
+                video_title="Space Documentary",
+                video_description="A story about black holes and gravity.",
+            )
+
+            description = mock_agent.call_args.kwargs["description"]
+            assert "Space Documentary" in description
+            assert "black holes and gravity" in description
+
+    def test_retranslate_entries_with_context(self):
+        entries = [
+            RetranslateEntry(index=1, original="Line 1", translated="第一句"),
+            RetranslateEntry(index=2, original="Line 2", translated="第二句"),
+            RetranslateEntry(index=3, original="Line 3", translated="第三句"),
+        ]
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "修正版第二句"
+            mock_translator.run.return_value = mock_response
+
+            result = retranslate_entries(
+                entries=entries,
+                selected_indices=[2],
+                user_context="主題是太空探索",
+            )
+
+            assert result == {2: "修正版第二句"}
+            prompt = mock_translator.run.call_args[0][0]
+            assert "上文參考" in prompt
+            assert "下文參考" in prompt
+            assert "主題是太空探索" in prompt
+
+    def test_retranslate_entries_invalid_index_raises_error(self):
+        entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
+        with pytest.raises(ValueError, match="selected_indices not found"):
+            retranslate_entries(entries=entries, selected_indices=[2])

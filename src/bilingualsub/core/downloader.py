@@ -25,6 +25,7 @@ class VideoMetadata:
     width: int
     height: int
     fps: float
+    description: str = ""
 
     def __post_init__(self) -> None:
         """Validate metadata constraints."""
@@ -38,6 +39,7 @@ class VideoMetadata:
             raise ValueError(f"FPS must be positive, got {self.fps}")
         if not self.title.strip():
             raise ValueError("Title cannot be empty or whitespace-only")
+        self.description = _sanitize_description(self.description)
 
 
 def download_youtube_video(
@@ -110,7 +112,18 @@ def download_youtube_video(
             output_path.unlink()
         raise DownloadError(f"Failed to extract metadata: {e}") from e
 
+    # yt-dlp's description is not reliably available in ffprobe output.
+    # Always prefer the description extracted from info_dict.
+    metadata.description = _sanitize_description(info_dict.get("description", ""))
+
     return metadata
+
+
+def _sanitize_description(raw: Any) -> str:
+    """Normalize video description into a compact single string."""
+    if not isinstance(raw, str):
+        return ""
+    return raw.strip()
 
 
 def _is_youtube_url(url: str) -> bool:
@@ -260,6 +273,7 @@ def _extract_metadata_from_info_dict(
         width=int(width),
         height=int(height),
         fps=float(fps),
+        description=_sanitize_description(info_dict.get("description", "")),
     )
 
 

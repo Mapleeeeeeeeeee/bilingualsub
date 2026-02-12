@@ -9,7 +9,9 @@ from bilingualsub.api.schemas import (
     JobCreateRequest,
     JobCreateResponse,
     JobStatusResponse,
+    PartialRetranslateRequest,
     SSEProgressData,
+    StartSubtitleRequest,
 )
 
 
@@ -146,3 +148,42 @@ class TestSSEProgressData:
         )
         assert data.status == JobStatus.DOWNLOADING
         assert data.progress == 10.0
+
+
+@pytest.mark.unit
+class TestStartSubtitleRequest:
+    def test_default_languages_are_none(self) -> None:
+        req = StartSubtitleRequest()
+        assert req.source_lang is None
+        assert req.target_lang is None
+
+    def test_custom_languages(self) -> None:
+        req = StartSubtitleRequest(source_lang="en", target_lang="ja")
+        assert req.source_lang == "en"
+        assert req.target_lang == "ja"
+
+
+@pytest.mark.unit
+class TestPartialRetranslateRequest:
+    def test_valid_payload(self) -> None:
+        req = PartialRetranslateRequest(
+            selected_indices=[2],
+            entries=[
+                {"index": 1, "original": "Line 1", "translated": "第一句"},
+                {"index": 2, "original": "Line 2", "translated": "第二句"},
+            ],
+            user_context="主題是太空探索",
+        )
+        assert req.selected_indices == [2]
+        assert len(req.entries) == 2
+
+    def test_selected_indices_must_exist(self) -> None:
+        with pytest.raises(
+            ValidationError, match="selected_indices not found in entries"
+        ):
+            PartialRetranslateRequest(
+                selected_indices=[3],
+                entries=[
+                    {"index": 1, "original": "Line 1", "translated": "第一句"},
+                ],
+            )

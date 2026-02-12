@@ -3,6 +3,7 @@
 import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import structlog
 from agno.agent import Agent
@@ -16,6 +17,9 @@ _BATCH_SIZE = 10
 _CONTEXT_SIZE = 3  # Number of previous entries to include as context
 _LOOKAHEAD_SIZE = 3  # Number of upcoming entries to include as forward context
 _MAX_RETRIES = 5
+_PARTIAL_CONTEXT_WINDOW = 2
+_MAX_METADATA_TITLE_CHARS = 200
+_MAX_METADATA_DESC_CHARS = 1200
 
 
 class TranslationError(Exception):
@@ -28,6 +32,72 @@ class RateLimitError(TranslationError):
     def __init__(self, retry_after: float, message: str = "") -> None:
         self.retry_after = retry_after
         super().__init__(message or f"Rate limited, retry after {retry_after:.0f}s")
+
+
+@dataclass
+class RetranslateEntry:
+    """Subtitle row used by partial re-translation."""
+
+    index: int
+    original: str
+    translated: str = ""
+
+
+def _compact_text(text: str) -> str:
+    """Normalize whitespace while preserving readable punctuation."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    """Trim overly long metadata to keep prompts focused."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "..."
+
+
+def _build_metadata_section(video_title: str, video_description: str) -> str:
+    """Build metadata context block used in system prompt."""
+    title = _truncate_text(_compact_text(video_title), _MAX_METADATA_TITLE_CHARS)
+    description = _truncate_text(
+        _compact_text(video_description), _MAX_METADATA_DESC_CHARS
+    )
+
+    lines = []
+    if title:
+        lines.append(f"影片標題：{title}")  # noqa: RUF001
+    if description:
+        lines.append(f"影片說明：{description}")  # noqa: RUF001
+    return "\n".join(lines)
+
+
+def _build_translator_description(
+    *,
+    source_lang: str,
+    target_lang: str,
+    video_title: str,
+    video_description: str,
+) -> str:
+    """Build agent system prompt description."""
+    base = (
+        "你是專業的影片字幕翻譯員。"
+        f"將{source_lang}字幕翻譯成自然、道地的{target_lang}。"
+        "規則：意譯為主，忠於語意但用自然口語表達；簡短有力，適合字幕閱讀；"  # noqa: RUF001
+        "收到編號字幕，只回傳相同編號的翻譯結果；不要加任何解釋或額外文字。"  # noqa: RUF001
+        "字幕可能在句子中間被截斷，這是正常的，請照樣翻譯，不要提示原文不完整。"  # noqa: RUF001
+    )
+    metadata_section = _build_metadata_section(video_title, video_description)
+    if not metadata_section:
+        return base
+    return (
+        f"{base}\n\n"
+        "以下是影片背景資訊，請用於理解語境、專有名詞與代稱，但不要逐字照抄："  # noqa: RUF001
+        f"\n{metadata_section}"
+    )
+
+
+def _strip_number_prefix(text: str) -> str:
+    """Remove optional leading numbering (e.g. '1. ...') from model output."""
+    return re.sub(r"^\s*\d+\s*[.):\uff0e]\s*", "", text, count=1)
 
 
 def _check_rate_limit(response_text: str) -> None:
@@ -183,9 +253,14 @@ def _translate_one_by_one(
     """
     results = []
     for entry in batch:
-        response = translator.run(
-            f"將這段字幕從{source_lang}翻譯成{target_lang}：{entry.text}"  # noqa: RUF001
-        )
+        try:
+            response = translator.run(
+                f"將這段字幕從{source_lang}翻譯成{target_lang}：{entry.text}"  # noqa: RUF001
+            )
+        except Exception as exc:
+            raise TranslationError(
+                f"Failed to translate entry {entry.index}: {entry.text}"
+            ) from exc
         translated_text = response.content.strip() if response.content else ""
         _check_rate_limit(translated_text)
         if not translated_text:
@@ -208,6 +283,8 @@ def translate_subtitle(
     *,
     source_lang: str = "en",
     target_lang: str = "zh-TW",
+    video_title: str = "",
+    video_description: str = "",
     on_progress: Callable[[int, int], None] | None = None,
     on_rate_limit: Callable[[float, int, int], None] | None = None,
 ) -> Subtitle:
@@ -220,6 +297,8 @@ def translate_subtitle(
         subtitle: The subtitle to translate
         source_lang: Source language code (default: "en")
         target_lang: Target language code (default: "zh-TW")
+        video_title: Video title for translation context.
+        video_description: Video description for translation context.
         on_progress: Optional callback for progress updates. Called with
             (completed_count, total_count) after each batch.
         on_rate_limit: Optional callback when rate limited. Called with
@@ -234,12 +313,11 @@ def translate_subtitle(
     settings = get_settings()
     translator = Agent(
         model=settings.translator_model,
-        description=(
-            "你是專業的影片字幕翻譯員。"
-            "將英文字幕翻譯成道地的台灣繁體中文。"
-            "規則：意譯為主，忠於語意但用自然口語表達；簡短有力，適合字幕閱讀；"  # noqa: RUF001
-            "收到編號字幕，只回傳相同編號的翻譯結果；不要加任何解釋或額外文字。"  # noqa: RUF001
-            "字幕可能在句子中間被截斷，這是正常的，請照樣翻譯，不要提示原文不完整。"  # noqa: RUF001
+        description=_build_translator_description(
+            source_lang=source_lang,
+            target_lang=target_lang,
+            video_title=video_title,
+            video_description=video_description,
         ),
     )
 
@@ -344,3 +422,126 @@ def translate_subtitle(
     ]
 
     return Subtitle(entries=translated_entries)
+
+
+def retranslate_entries(
+    *,
+    entries: list[RetranslateEntry],
+    selected_indices: list[int],
+    source_lang: str = "en",
+    target_lang: str = "zh-TW",
+    video_title: str = "",
+    video_description: str = "",
+    user_context: str | None = None,
+) -> dict[int, str]:
+    """Re-translate selected subtitle entries with local context.
+
+    Args:
+        entries: Full subtitle rows in current editor order.
+        selected_indices: Entry indices that should be re-translated.
+        source_lang: Source language code.
+        target_lang: Target language code.
+        video_title: Video title for translation context.
+        video_description: Video description for translation context.
+        user_context: Optional extra context provided by user.
+
+    Returns:
+        Mapping: entry index -> translated text.
+
+    Raises:
+        ValueError: If request payload is invalid.
+        TranslationError: If translation fails after retries.
+    """
+    if not entries:
+        raise ValueError("entries cannot be empty")
+    if not selected_indices:
+        raise ValueError("selected_indices cannot be empty")
+
+    ordered_indices = list(dict.fromkeys(selected_indices))
+    position_by_index = {entry.index: i for i, entry in enumerate(entries)}
+    missing = [idx for idx in ordered_indices if idx not in position_by_index]
+    if missing:
+        raise ValueError(f"selected_indices not found: {missing}")
+
+    settings = get_settings()
+    translator = Agent(
+        model=settings.translator_model,
+        description=_build_translator_description(
+            source_lang=source_lang,
+            target_lang=target_lang,
+            video_title=video_title,
+            video_description=video_description,
+        ),
+    )
+
+    normalized_user_context = _compact_text(user_context or "")
+    results: dict[int, str] = {}
+
+    for target_index in ordered_indices:
+        position = position_by_index[target_index]
+        target_entry = entries[position]
+        prev_entries = entries[max(0, position - _PARTIAL_CONTEXT_WINDOW) : position]
+        next_entries = entries[position + 1 : position + 1 + _PARTIAL_CONTEXT_WINDOW]
+
+        sections: list[str] = []
+        if prev_entries:
+            prev_lines = "\n".join(
+                f"- {entry.original} → {entry.translated or '(待翻譯)'}"
+                for entry in prev_entries
+            )
+            sections.append(f"【上文參考】\n{prev_lines}")
+
+        if next_entries:
+            next_lines = "\n".join(
+                f"- {entry.original} → {entry.translated or '(待翻譯)'}"
+                for entry in next_entries
+            )
+            sections.append(f"【下文參考】\n{next_lines}")
+
+        if normalized_user_context:
+            sections.append(f"【使用者補充上下文】\n{normalized_user_context}")
+
+        prompt_sections = "\n\n".join(sections)
+        prompt = (f"{prompt_sections}\n\n" if prompt_sections else "") + (
+            f"請將以下字幕從{source_lang}翻譯成{target_lang}。\n"
+            "只回傳單行翻譯內容，不要加編號、引號或任何說明。\n\n"  # noqa: RUF001
+            f"原文: {target_entry.original}\n"
+            f"目前翻譯（可修正）: {target_entry.translated or '(空)'}"  # noqa: RUF001
+        )
+
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                response = translator.run(prompt)
+                response_text = response.content.strip() if response.content else ""
+                if not response_text:
+                    raise TranslationError(
+                        f"Empty re-translation response for entry {target_index}"
+                    )
+                _check_rate_limit(response_text)
+                cleaned = _strip_number_prefix(response_text).strip()
+                if not cleaned:
+                    raise TranslationError(
+                        f"Empty re-translation response for entry {target_index}"
+                    )
+                results[target_index] = cleaned
+                break
+            except RateLimitError as exc:
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        "Rate limited during re-translation for entry %d "
+                        "(attempt %d/%d), waiting %.0fs",
+                        target_index,
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        exc.retry_after,
+                    )
+                    time.sleep(exc.retry_after)
+                else:
+                    raise TranslationError(
+                        f"Rate limit exceeded after {_MAX_RETRIES} retries "
+                        f"for entry {target_index}"
+                    ) from exc
+        else:
+            raise TranslationError(f"Failed to re-translate entry {target_index}")
+
+    return results

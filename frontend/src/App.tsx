@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { UrlInput } from './components/UrlInput';
@@ -9,9 +10,18 @@ import { useJob } from './hooks/useJob';
 import { SUBTITLE_STEPS, FileType } from './constants';
 import { apiClient } from './api/client';
 
+const LANGUAGE_OPTIONS = [
+  { value: 'en', labelKey: 'lang.en' },
+  { value: 'zh-TW', labelKey: 'lang.zh-TW' },
+  { value: 'ja', labelKey: 'lang.ja' },
+  { value: 'ko', labelKey: 'lang.ko' },
+];
+
 function App() {
   const { t } = useTranslation();
   const { state, submitJob, subtitleJob, burnJob, reset, backToEdit } = useJob();
+  const [sourceLang, setSourceLang] = useState('en');
+  const [targetLang, setTargetLang] = useState('zh-TW');
 
   const isIdle = state.phase === 'idle';
   const isProcessing = state.phase === 'submitting' || state.phase === 'processing';
@@ -73,8 +83,38 @@ function App() {
 
             {/* Actions */}
             <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-4 text-gray-500">
+                <label className="text-xs uppercase tracking-widest font-bold">
+                  {t('form.label_translate')}
+                </label>
+                <div className="flex items-center gap-2 text-black font-serif text-lg border-b border-gray-200 pb-1">
+                  <select
+                    value={sourceLang}
+                    onChange={e => setSourceLang(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer appearance-none hover:opacity-60"
+                  >
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <option key={lang.value} value={lang.value}>
+                        {t(lang.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-gray-300">→</span>
+                  <select
+                    value={targetLang}
+                    onChange={e => setTargetLang(e.target.value)}
+                    className="bg-transparent focus:outline-none cursor-pointer appearance-none hover:opacity-60"
+                  >
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <option key={lang.value} value={lang.value}>
+                        {t(lang.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <button
-                onClick={subtitleJob}
+                onClick={() => subtitleJob(sourceLang, targetLang)}
                 className="px-8 py-3 bg-black text-white rounded-full hover:scale-105 transition-transform"
               >
                 {t('app.generate_subtitles')}

@@ -1,12 +1,13 @@
 """Tests for API routes."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from bilingualsub.api.app import create_app
-from bilingualsub.api.constants import JobStatus
+from bilingualsub.api.constants import FileType, JobStatus
 from bilingualsub.api.jobs import JobManager
 
 
@@ -148,3 +149,81 @@ class TestStartSubtitle:
         response = await client.post(f"/api/jobs/{job_id}/subtitle")
         assert response.status_code == 200
         assert response.json()["status"] == "subtitle_started"
+
+    async def test_start_subtitle_with_language_override(
+        self, client: AsyncClient, app
+    ) -> None:
+        """Should update source/target language when triggering subtitle."""
+        create_resp = await client.post(
+            "/api/jobs",
+            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+        )
+        job_id = create_resp.json()["job_id"]
+
+        job = app.state.job_manager.get_job(job_id)
+        job.status = JobStatus.DOWNLOAD_COMPLETE
+        job.source_lang = "en"
+        job.target_lang = "zh-TW"
+
+        response = await client.post(
+            f"/api/jobs/{job_id}/subtitle",
+            json={"source_lang": "ja", "target_lang": "ko"},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "subtitle_started"
+        assert job.source_lang == "ja"
+        assert job.target_lang == "ko"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestPartialRetranslate:
+    async def test_partial_retranslate_success(self, client: AsyncClient, app) -> None:
+        create_resp = await client.post(
+            "/api/jobs",
+            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+        )
+        job_id = create_resp.json()["job_id"]
+
+        job = app.state.job_manager.get_job(job_id)
+        job.output_files[FileType.SOURCE_VIDEO] = Path("/tmp/source.mp4")
+        job.source_lang = "en"
+        job.target_lang = "zh-TW"
+
+        with patch("bilingualsub.api.routes.retranslate_entries") as mock_retranslate:
+            mock_retranslate.return_value = {2: "修正版第二句"}
+            response = await client.post(
+                f"/api/jobs/{job_id}/retranslate",
+                json={
+                    "selected_indices": [2],
+                    "entries": [
+                        {"index": 1, "original": "Line 1", "translated": "第一句"},
+                        {"index": 2, "original": "Line 2", "translated": "第二句"},
+                    ],
+                    "user_context": "主題是太空探索",
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"] == [{"index": 2, "translated": "修正版第二句"}]
+
+    async def test_partial_retranslate_requires_pipeline_complete(
+        self, client: AsyncClient
+    ) -> None:
+        create_resp = await client.post(
+            "/api/jobs",
+            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+        )
+        job_id = create_resp.json()["job_id"]
+
+        response = await client.post(
+            f"/api/jobs/{job_id}/retranslate",
+            json={
+                "selected_indices": [1],
+                "entries": [
+                    {"index": 1, "original": "Line 1", "translated": "第一句"},
+                ],
+            },
+        )
+        assert response.status_code == 422

@@ -19,7 +19,7 @@ from bilingualsub.api.constants import (
     JobStatus,
     SSEEvent,
 )
-from bilingualsub.api.errors import InvalidRequestError, JobNotFoundError
+from bilingualsub.api.errors import InvalidRequestError, JobNotFoundError, PipelineError
 from bilingualsub.api.pipeline import run_burn, run_download, run_subtitle
 from bilingualsub.api.schemas import (
     BurnRequest,
@@ -27,7 +27,12 @@ from bilingualsub.api.schemas import (
     JobCreateRequest,
     JobCreateResponse,
     JobStatusResponse,
+    PartialRetranslateItem,
+    PartialRetranslateRequest,
+    PartialRetranslateResponse,
+    StartSubtitleRequest,
 )
+from bilingualsub.core import RetranslateEntry, TranslationError, retranslate_entries
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -230,7 +235,11 @@ async def download_file(job_id: str, file_type: str, request: Request) -> FileRe
 
 
 @router.post("/jobs/{job_id}/subtitle")
-async def start_subtitle(job_id: str, request: Request) -> dict[str, str]:
+async def start_subtitle(
+    job_id: str,
+    request: Request,
+    body: StartSubtitleRequest | None = None,
+) -> dict[str, str]:
     """Trigger subtitle generation for a downloaded job."""
     job = _get_job_or_404(request, job_id)
     if job.status != JobStatus.DOWNLOAD_COMPLETE:
@@ -238,6 +247,11 @@ async def start_subtitle(job_id: str, request: Request) -> dict[str, str]:
             "Job is not in download_complete state",
             detail=f"Current status: {job.status}",
         )
+    if body:
+        if body.source_lang:
+            job.source_lang = body.source_lang
+        if body.target_lang:
+            job.target_lang = body.target_lang
     _start_background_task(request, run_subtitle(job))
     return {"status": "subtitle_started"}
 
@@ -256,6 +270,55 @@ async def burn_job(job_id: str, body: BurnRequest, request: Request) -> dict[str
     job.event_queue = asyncio.Queue()
     _start_background_task(request, run_burn(job, body.srt_content))
     return {"status": "burning"}
+
+
+@router.post("/jobs/{job_id}/retranslate", response_model=PartialRetranslateResponse)
+async def partial_retranslate(
+    job_id: str,
+    body: PartialRetranslateRequest,
+    request: Request,
+) -> PartialRetranslateResponse:
+    """Re-translate selected subtitle entries with surrounding context."""
+    job = _get_job_or_404(request, job_id)
+    if FileType.SOURCE_VIDEO not in job.output_files:
+        raise InvalidRequestError("Pipeline not complete")
+
+    try:
+        results = await asyncio.to_thread(
+            retranslate_entries,
+            entries=[
+                RetranslateEntry(
+                    index=entry.index,
+                    original=entry.original,
+                    translated=entry.translated,
+                )
+                for entry in body.entries
+            ],
+            selected_indices=body.selected_indices,
+            source_lang=job.source_lang,
+            target_lang=job.target_lang,
+            video_title=job.video_title,
+            video_description=job.video_description,
+            user_context=body.user_context,
+        )
+    except ValueError as exc:
+        raise InvalidRequestError(
+            "Invalid re-translation request",
+            detail=str(exc),
+        ) from exc
+    except TranslationError as exc:
+        raise PipelineError(
+            "translation_failed",
+            "Failed to re-translate subtitles",
+            detail=str(exc),
+        ) from exc
+
+    return PartialRetranslateResponse(
+        results=[
+            PartialRetranslateItem(index=index, translated=translated)
+            for index, translated in sorted(results.items())
+        ]
+    )
 
 
 @router.get("/health")
