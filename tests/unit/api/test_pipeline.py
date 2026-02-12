@@ -186,10 +186,9 @@ class TestRunPipeline:
         mock_serialize_ass,
         mock_burn,
     ) -> None:
-        """Given job with time range, pipeline should call trim_video."""
+        """Given job with time range, download_youtube_video should receive time parameters."""
         sub = _make_subtitle()
         mock_download.return_value = _make_metadata()
-        mock_trim.return_value = Path("/tmp/trimmed.mp4")
         mock_transcribe.return_value = sub
         mock_translate.return_value = sub
         mock_merge.return_value = sub.entries
@@ -199,13 +198,14 @@ class TestRunPipeline:
         job = _make_job_with_time_range()
         await run_pipeline(job)
 
-        # Verify trim was called
-        mock_trim.assert_called_once()
-        call_args = mock_trim.call_args[0]
-        assert call_args[0].name == "video.mp4"
-        assert call_args[1].name == "video_trimmed.mp4"
-        assert call_args[2] == 10.0
-        assert call_args[3] == 30.0
+        # Verify download was called with time parameters
+        mock_download.assert_called_once()
+        call_kwargs = mock_download.call_args[1]
+        assert call_kwargs["start_time"] == 10.0
+        assert call_kwargs["end_time"] == 30.0
+
+        # Verify trim_video was NOT called (trimming happens during download now)
+        mock_trim.assert_not_called()
 
         assert job.status == JobStatus.COMPLETED
 

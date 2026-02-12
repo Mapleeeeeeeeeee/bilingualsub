@@ -554,3 +554,251 @@ class TestDownloadYoutubeVideo:
                 output_path = tmp_path / f"video_{valid_urls.index(url)}.mp4"
                 # Should not raise ValueError
                 download_youtube_video(url, output_path)
+
+
+class TestDownloadWithTimeRange:
+    """Test cases for downloading with time range."""
+
+    @pytest.fixture
+    def mock_yt_dlp(self):
+        """Mock yt-dlp."""
+        with patch("bilingualsub.core.downloader.yt_dlp") as mock:
+            yield mock
+
+    @pytest.fixture
+    def mock_subprocess(self):
+        """Mock subprocess for ffprobe."""
+        with patch("bilingualsub.core.downloader.subprocess") as mock:
+            mock.CalledProcessError = subprocess.CalledProcessError
+            yield mock
+
+    @pytest.fixture
+    def valid_ffprobe_output(self) -> str:
+        """Return valid ffprobe JSON output."""
+        return json.dumps(
+            {
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "width": 1920,
+                        "height": 1080,
+                        "r_frame_rate": "30/1",
+                    }
+                ],
+                "format": {
+                    "duration": "60.0",
+                    "tags": {"title": "Test Video"},
+                },
+            }
+        )
+
+    @patch("bilingualsub.core.downloader.shutil.which")
+    def test_download_with_start_and_end_time(
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess, valid_ffprobe_output
+    ):
+        """Test downloading with both start_time and end_time."""
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        output_path = tmp_path / "video.mp4"
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        mock_result = Mock()
+        mock_result.stdout = valid_ffprobe_output
+        mock_subprocess.run.return_value = mock_result
+
+        # Download with time range
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            output_path,
+            start_time=30.0,
+            end_time=90.0,
+        )
+
+        # Verify download_ranges was added to ydl_opts
+        mock_yt_dlp.YoutubeDL.assert_called_once()
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert "download_ranges" in ydl_opts
+        assert ydl_opts["force_keyframes_at_cuts"] is True
+
+        # Verify metadata has correct duration (from ffprobe)
+        assert metadata.duration == 60.0
+
+    @patch("bilingualsub.core.downloader.shutil.which")
+    def test_download_with_only_start_time(
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess
+    ):
+        """Test downloading with only start_time."""
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        output_path = tmp_path / "video.mp4"
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe to fail, use info_dict fallback
+        mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
+
+        # Download with only start_time
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            output_path,
+            start_time=30.0,
+        )
+
+        # Verify download_ranges was added
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert "download_ranges" in ydl_opts
+        assert ydl_opts["force_keyframes_at_cuts"] is True
+
+        # Duration should be calculated as (original - start)
+        assert metadata.duration == 90.0  # 120 - 30
+
+    @patch("bilingualsub.core.downloader.shutil.which")
+    def test_download_with_only_end_time(
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess
+    ):
+        """Test downloading with only end_time."""
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        output_path = tmp_path / "video.mp4"
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe to fail, use info_dict fallback
+        mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
+
+        # Download with only end_time
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            output_path,
+            end_time=90.0,
+        )
+
+        # Verify download_ranges was added
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert "download_ranges" in ydl_opts
+        assert ydl_opts["force_keyframes_at_cuts"] is True
+
+        # Duration should be calculated as end - 0
+        assert metadata.duration == 90.0
+
+    @patch("bilingualsub.core.downloader.shutil.which")
+    def test_download_without_time_range(
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess, valid_ffprobe_output
+    ):
+        """Test downloading without time range (backward compatibility)."""
+        mock_which.return_value = "/usr/bin/ffmpeg"
+        output_path = tmp_path / "video.mp4"
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        mock_result = Mock()
+        mock_result.stdout = valid_ffprobe_output
+        mock_subprocess.run.return_value = mock_result
+
+        # Download without time range
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
+        )
+
+        # Verify download_ranges was NOT added
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert "download_ranges" not in ydl_opts
+        assert "force_keyframes_at_cuts" not in ydl_opts
+
+        # Duration should be from ffprobe
+        assert metadata.duration == 60.0
+
+    @patch("bilingualsub.core.downloader.shutil.which")
+    def test_download_with_time_range_no_ffmpeg(
+        self, mock_which, tmp_path, mock_yt_dlp, mock_subprocess
+    ):
+        """Test downloading with time range when FFmpeg is not available."""
+        mock_which.return_value = None  # No FFmpeg
+        output_path = tmp_path / "video.mp4"
+
+        mock_ydl_instance = MagicMock()
+        mock_yt_dlp.YoutubeDL.return_value.__enter__.return_value = mock_ydl_instance
+
+        def extract_info_side_effect(url, download=True):
+            output_path.touch()
+            return {
+                "title": "Test Video",
+                "duration": 120.0,
+                "width": 1920,
+                "height": 1080,
+                "fps": 30.0,
+            }
+
+        mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
+
+        # Mock ffprobe to fail
+        mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
+
+        # Download with time range (fallback format)
+        metadata = download_youtube_video(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            output_path,
+            start_time=30.0,
+            end_time=90.0,
+        )
+
+        # Verify download_ranges was added even without FFmpeg
+        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
+        assert "download_ranges" in ydl_opts
+        assert ydl_opts["force_keyframes_at_cuts"] is True
+
+        # Verify fallback format was used (no merge_output_format)
+        assert "merge_output_format" not in ydl_opts
+
+        # Duration should be calculated as (end - start)
+        assert metadata.duration == 60.0

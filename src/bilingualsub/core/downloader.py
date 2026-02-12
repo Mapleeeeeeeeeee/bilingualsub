@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import yt_dlp
+from yt_dlp.utils import download_range_func
 
 
 class DownloadError(Exception):
@@ -43,6 +44,8 @@ def download_youtube_video(
     url: str,
     output_path: Path,
     on_progress: Callable[[float, float], None] | None = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
 ) -> VideoMetadata:
     """
     Download YouTube video and extract metadata.
@@ -52,6 +55,8 @@ def download_youtube_video(
         output_path: Path where video will be saved (including extension)
         on_progress: Optional callback for download progress
             (downloaded_bytes, total_bytes)
+        start_time: Optional start time in seconds (None = start from beginning)
+        end_time: Optional end time in seconds (None = download to end)
 
     Returns:
         VideoMetadata with video information
@@ -74,7 +79,13 @@ def download_youtube_video(
 
     # Download video and get info_dict
     try:
-        info_dict = _download_video(url, output_path, on_progress=on_progress)
+        info_dict = _download_video(
+            url,
+            output_path,
+            on_progress=on_progress,
+            start_time=start_time,
+            end_time=end_time,
+        )
     except Exception as e:
         raise DownloadError(f"Failed to download video: {e}") from e
 
@@ -84,7 +95,9 @@ def download_youtube_video(
     except (FileNotFoundError, OSError, subprocess.CalledProcessError):
         # FFprobe not available or failed, use info_dict as fallback
         try:
-            metadata = _extract_metadata_from_info_dict(info_dict, output_path)
+            metadata = _extract_metadata_from_info_dict(
+                info_dict, output_path, start_time, end_time
+            )
         except Exception as e:
             # Clean up downloaded file on metadata extraction failure
             if output_path.exists():
@@ -115,6 +128,8 @@ def _download_video(
     url: str,
     output_path: Path,
     on_progress: Callable[[float, float], None] | None = None,
+    start_time: float | None = None,
+    end_time: float | None = None,
 ) -> dict[str, Any]:
     """Download video using yt-dlp and return info_dict."""
     last_reported = [0.0]  # Use list for mutability in closure
@@ -140,7 +155,7 @@ def _download_video(
 
     if has_ffmpeg:
         # High quality format (requires FFmpeg for merging)
-        ydl_opts = {
+        ydl_opts: dict[str, Any] = {
             "format": (
                 "bestvideo[height<=1440][ext=mp4]+bestaudio[ext=m4a]"
                 "/best[height<=1440][ext=mp4]/best"
@@ -160,6 +175,15 @@ def _download_video(
             "no_warnings": True,
             "progress_hooks": [_progress_hook],
         }
+
+    # Add download range if time range is specified
+    if start_time is not None or end_time is not None:
+        range_start = start_time if start_time is not None else 0.0
+        range_end = end_time if end_time is not None else float("inf")
+        ydl_opts["download_ranges"] = download_range_func(
+            None, [(range_start, range_end)]
+        )
+        ydl_opts["force_keyframes_at_cuts"] = True
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict_result = ydl.extract_info(url, download=True)
@@ -188,7 +212,10 @@ def _download_video(
 
 
 def _extract_metadata_from_info_dict(
-    info_dict: dict[str, Any], output_path: Path
+    info_dict: dict[str, Any],
+    output_path: Path,
+    start_time: float | None = None,
+    end_time: float | None = None,
 ) -> VideoMetadata:
     """
     Extract metadata from yt-dlp's info_dict.
@@ -208,6 +235,13 @@ def _extract_metadata_from_info_dict(
             f"Duration is required but got {duration}. "
             "Please install FFmpeg/FFprobe for reliable metadata extraction."
         )
+
+    # Adjust duration if time range was specified
+    if start_time is not None or end_time is not None:
+        original_duration = duration
+        range_start = start_time if start_time is not None else 0.0
+        range_end = end_time if end_time is not None else original_duration
+        duration = range_end - range_start
 
     if not title or not title.strip():
         raise DownloadError("Title is required but missing from video info")

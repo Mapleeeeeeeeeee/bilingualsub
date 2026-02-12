@@ -240,6 +240,8 @@ async def _acquire_video(
         job.youtube_url,
         video_path,
         on_progress=_on_download_progress,
+        start_time=job.start_time,
+        end_time=job.end_time,
     )
     log.info(
         "step_done",
@@ -262,15 +264,13 @@ def _send_download_complete(job: Job) -> None:
 
 
 async def run_download(job: Job) -> None:
-    """Phase 1: Download -> Trim -> Extract Audio."""
+    """Phase 1: Download -> Extract Audio."""
     log = logger.bind(job_id=job.id)
     work_dir = Path(tempfile.mkdtemp(prefix=f"bilingualsub_{job.id}_"))
 
     try:
         video_path, metadata = await _acquire_video(job, work_dir, log)
-        video_path = await _trim_if_needed(
-            job, video_path, work_dir, metadata.duration, log
-        )
+        # Trimming is now handled during download via start_time/end_time
         await _extract_audio_step(job, video_path, work_dir, log)
 
         # Save metadata for subtitle phase
@@ -394,11 +394,7 @@ async def run_pipeline(job: Job) -> None:
     try:
         # --- Step 1: Download or use local file ---
         video_path, metadata = await _acquire_video(job, work_dir, log)
-
-        # --- Step 1.25: Trim video (if time range specified) ---
-        video_path = await _trim_if_needed(
-            job, video_path, work_dir, metadata.duration, log
-        )
+        # Trimming is now handled during download via start_time/end_time
 
         # --- Step 1.5: Extract audio ---
         audio_path = await _extract_audio_step(job, video_path, work_dir, log)
