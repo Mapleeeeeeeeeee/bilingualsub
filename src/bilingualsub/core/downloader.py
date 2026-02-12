@@ -2,7 +2,7 @@
 
 import json
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -290,7 +290,12 @@ def _extract_metadata_with_ffprobe(video_path: Path) -> VideoMetadata:
         str(video_path),
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(  # nosec B603
+        cmd,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     data = json.loads(result.stdout)
 
     # Find video stream

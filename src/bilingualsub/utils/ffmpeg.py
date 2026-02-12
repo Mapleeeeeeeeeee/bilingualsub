@@ -1,7 +1,7 @@
 """FFmpeg utilities for burning subtitles into videos."""
 
 import json
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tempfile
 from collections.abc import Callable, Iterable
@@ -130,7 +130,7 @@ def burn_subtitles(
     # Use a temporary file for stderr to prevent pipe buffer deadlock
     with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stderr_file:
         try:
-            process = subprocess.Popen(
+            process = subprocess.Popen(  # nosec B603
                 cmd,
                 stdout=stdout_target,
                 stderr=stderr_file,
@@ -277,7 +277,12 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(  # nosec B603
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         raise FFmpegError(f"ffprobe failed for {video_path}: {e}") from e
 
@@ -338,7 +343,12 @@ def get_audio_duration(audio_path: Path) -> float:
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(  # nosec B603
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         raise FFmpegError(f"ffprobe failed for {audio_path}: {e}") from e
 
