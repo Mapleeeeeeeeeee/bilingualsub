@@ -99,10 +99,8 @@ class TestBurnSubtitles:
         assert expected_filter in vf_filter
         assert str(subtitle_path) in vf_filter
 
-        # Verify VideoToolbox encoding
+        # Verify encoder flag exists (platform-specific encoder is tested below)
         assert "-c:v" in cmd
-        c_v_idx = cmd.index("-c:v")
-        assert cmd[c_v_idx + 1] == "h264_videotoolbox"
 
         # Verify audio copy
         assert "-c:a" in cmd
