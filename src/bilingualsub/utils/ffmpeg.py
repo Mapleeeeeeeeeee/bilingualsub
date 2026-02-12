@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import ffmpeg
@@ -12,6 +12,26 @@ import ffmpeg
 
 class FFmpegError(Exception):
     """Exception raised when FFmpeg operations fail."""
+
+
+def _parse_and_report_progress(
+    stream: Iterable[bytes],
+    *,
+    total_duration: float,
+    on_progress: Callable[[float], None],
+) -> None:
+    """Parse ffmpeg progress stream and emit percentage updates."""
+    for line in stream:
+        decoded = line.decode("utf-8", errors="replace").strip()
+        if not decoded.startswith("out_time_us="):
+            continue
+
+        try:
+            time_us = int(decoded.split("=")[1])
+            progress = min(time_us / (total_duration * 1_000_000) * 100, 99.0)
+            on_progress(progress)
+        except (ValueError, IndexError):
+            continue
 
 
 def burn_subtitles(
@@ -99,27 +119,35 @@ def burn_subtitles(
         str(output_path),
     ]
 
+    # Only open stdout pipe when progress callback is enabled.
+    # Otherwise route stdout to DEVNULL to avoid filling PIPE buffers.
+    stdout_target: int = (
+        subprocess.PIPE
+        if on_progress is not None and total_duration > 0
+        else subprocess.DEVNULL
+    )
+
     # Use a temporary file for stderr to prevent pipe buffer deadlock
     with tempfile.SpooledTemporaryFile(max_size=1024 * 1024) as stderr_file:
         try:
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=stdout_target,
                 stderr=stderr_file,
             )
 
-            if process.stdout and on_progress and total_duration > 0:
-                for line in process.stdout:
-                    decoded = line.decode("utf-8", errors="replace").strip()
-                    if decoded.startswith("out_time_us="):
-                        try:
-                            time_us = int(decoded.split("=")[1])
-                            progress = min(
-                                time_us / (total_duration * 1_000_000) * 100, 99.0
-                            )
-                            on_progress(progress)
-                        except (ValueError, IndexError):
-                            pass
+            if process.stdout:
+                try:
+                    if on_progress is not None:
+                        _parse_and_report_progress(
+                            process.stdout,
+                            total_duration=total_duration,
+                            on_progress=on_progress,
+                        )
+                finally:
+                    close_stdout = getattr(process.stdout, "close", None)
+                    if callable(close_stdout):
+                        close_stdout()
 
             returncode = process.wait()
             if returncode != 0:

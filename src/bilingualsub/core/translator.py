@@ -9,7 +9,11 @@ import structlog
 from agno.agent import Agent
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
-from bilingualsub.utils.config import get_settings
+from bilingualsub.utils.config import (
+    get_groq_api_key,
+    get_openai_api_key,
+    get_settings,
+)
 
 logger = structlog.get_logger()
 
@@ -41,6 +45,19 @@ class RetranslateEntry:
     index: int
     original: str
     translated: str = ""
+
+
+def _ensure_translator_api_key(translator_model: str) -> None:
+    """Validate API key for managed translator providers.
+
+    Raises:
+        ValueError: If required provider key is missing.
+    """
+    model_prefix = translator_model.strip().lower()
+    if model_prefix.startswith("groq:"):
+        get_groq_api_key()
+    elif model_prefix.startswith("openai:"):
+        get_openai_api_key()
 
 
 def _compact_text(text: str) -> str:
@@ -309,8 +326,10 @@ def translate_subtitle(
 
     Raises:
         TranslationError: If translation fails
+        ValueError: If provider API key is missing
     """
     settings = get_settings()
+    _ensure_translator_api_key(settings.translator_model)
     translator = Agent(
         model=settings.translator_model,
         description=_build_translator_description(
@@ -450,6 +469,7 @@ def retranslate_entries(
 
     Raises:
         ValueError: If request payload is invalid.
+        ValueError: If provider API key is missing.
         TranslationError: If translation fails after retries.
     """
     if not entries:
@@ -464,6 +484,7 @@ def retranslate_entries(
         raise ValueError(f"selected_indices not found: {missing}")
 
     settings = get_settings()
+    _ensure_translator_api_key(settings.translator_model)
     translator = Agent(
         model=settings.translator_model,
         description=_build_translator_description(

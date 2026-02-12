@@ -39,22 +39,31 @@ class TestFormatBurnIn:
 
         output_path = tmp_path / "output.mp4"
 
-        # Mock ffmpeg module to avoid real ffmpeg execution
-        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock_ffmpeg:
-            mock_stream = MagicMock()
-            mock_ffmpeg.input.return_value = mock_stream
-            mock_stream.output.return_value = mock_stream
-            mock_stream.overwrite_output.return_value = mock_stream
-            mock_stream.run.return_value = None
-
+        with (
+            patch(
+                "bilingualsub.utils.ffmpeg.extract_video_metadata",
+                return_value={
+                    "duration": 10.0,
+                    "width": 1920,
+                    "height": 1080,
+                    "fps": 30.0,
+                    "title": "test",
+                },
+            ),
+            patch("bilingualsub.utils.ffmpeg.subprocess.Popen") as mock_popen,
+        ):
+            process = MagicMock()
+            process.stdout = []
+            process.wait.return_value = 0
+            mock_popen.return_value = process
             result = burn_subtitles(video_path, srt_path, output_path)
 
         # Verify burn_subtitles accepted the SRT file
         assert result == output_path
-        mock_ffmpeg.input.assert_called_once()
-        mock_stream.output.assert_called_once()
-        call_kwargs = mock_stream.output.call_args
-        assert "subtitles=" in call_kwargs[1]["vf"]
+        mock_popen.assert_called_once()
+        ffmpeg_cmd = mock_popen.call_args.args[0]
+        vf_idx = ffmpeg_cmd.index("-vf")
+        assert "subtitles=" in ffmpeg_cmd[vf_idx + 1]
 
     def test_when_serialized_ass_written_to_file_then_burn_subtitles_accepts_it(
         self,
@@ -80,22 +89,31 @@ class TestFormatBurnIn:
 
         output_path = tmp_path / "output.mp4"
 
-        # Mock ffmpeg module to avoid real ffmpeg execution
-        with patch("bilingualsub.utils.ffmpeg.ffmpeg") as mock_ffmpeg:
-            mock_stream = MagicMock()
-            mock_ffmpeg.input.return_value = mock_stream
-            mock_stream.output.return_value = mock_stream
-            mock_stream.overwrite_output.return_value = mock_stream
-            mock_stream.run.return_value = None
-
+        with (
+            patch(
+                "bilingualsub.utils.ffmpeg.extract_video_metadata",
+                return_value={
+                    "duration": 10.0,
+                    "width": 1920,
+                    "height": 1080,
+                    "fps": 30.0,
+                    "title": "test",
+                },
+            ),
+            patch("bilingualsub.utils.ffmpeg.subprocess.Popen") as mock_popen,
+        ):
+            process = MagicMock()
+            process.stdout = []
+            process.wait.return_value = 0
+            mock_popen.return_value = process
             result = burn_subtitles(video_path, ass_path, output_path)
 
         # Verify burn_subtitles accepted the ASS file
         assert result == output_path
-        mock_ffmpeg.input.assert_called_once()
-        mock_stream.output.assert_called_once()
-        call_kwargs = mock_stream.output.call_args
-        assert "ass=" in call_kwargs[1]["vf"]
+        mock_popen.assert_called_once()
+        ffmpeg_cmd = mock_popen.call_args.args[0]
+        vf_idx = ffmpeg_cmd.index("-vf")
+        assert "ass=" in ffmpeg_cmd[vf_idx + 1]
 
     def test_serialized_ass_file_content_is_valid_ass_format(
         self,
