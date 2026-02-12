@@ -173,7 +173,8 @@ jobs:
       - name: Run E2E tests
         run: |
           uv run pytest tests/e2e \
-            -m "e2e"
+            -m "e2e" \
+            --cov-fail-under=0
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 

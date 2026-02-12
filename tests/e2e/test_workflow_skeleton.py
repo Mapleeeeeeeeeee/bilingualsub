@@ -14,6 +14,7 @@ Note:
     Burn-in tests are marked with @pytest.mark.burn_in
 """
 
+import os
 import shutil
 from datetime import timedelta
 from pathlib import Path
@@ -62,8 +63,14 @@ requires_ffmpeg = pytest.mark.skipif(
     reason="FFmpeg/FFprobe not installed",
 )
 
+requires_youtube_e2e = pytest.mark.skipif(
+    os.getenv("ENABLE_YOUTUBE_E2E", "").lower() not in {"1", "true", "yes"},
+    reason="ENABLE_YOUTUBE_E2E not set; skipping live YouTube E2E download tests",
+)
+
 
 @pytest.mark.e2e
+@requires_youtube_e2e
 class TestBilingualSubWorkflow:
     """E2E tests for the complete bilingual subtitle workflow."""
 
