@@ -392,10 +392,15 @@ class TestDownloadVideo:
         # Verify file was cleaned up
         assert not output_path.exists()
 
-    def test_ffprobe_missing_title_uses_filename(
+    def test_info_dict_title_overrides_ffprobe(
         self, tmp_path, mock_yt_dlp, mock_subprocess
     ):
-        """Test that missing title in ffprobe uses filename as fallback."""
+        """info_dict.title is authoritative; ffprobe container tags are ignored.
+
+        MP4 container tags are usually empty for freshly-downloaded files, so
+        ffprobe would fall back to the filename stem. yt-dlp's info_dict carries
+        the real platform title (YouTube / X / TikTok), and that must win.
+        """
         output_path = tmp_path / "my_video.mp4"
 
         mock_ydl_instance = MagicMock()
@@ -404,7 +409,7 @@ class TestDownloadVideo:
         def extract_info_side_effect(url, download=True):
             output_path.touch()
             return {
-                "title": "Test Video",
+                "title": "Real Platform Title",
                 "duration": 120.0,
                 "width": 1920,
                 "height": 1080,
@@ -413,7 +418,8 @@ class TestDownloadVideo:
 
         mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
-        # Mock ffprobe without title
+        # ffprobe returns no title (typical for fresh downloads) and would
+        # fall back to the filename stem "my_video" — but info_dict should win.
         mock_result = Mock()
         mock_result.stdout = json.dumps(
             {
@@ -427,7 +433,7 @@ class TestDownloadVideo:
                 ],
                 "format": {
                     "duration": "120.5",
-                    "tags": {},  # No title
+                    "tags": {},
                 },
             }
         )
@@ -437,7 +443,7 @@ class TestDownloadVideo:
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
-        assert metadata.title == "my_video"
+        assert metadata.title == "Real Platform Title"
 
     def test_ffprobe_fractional_fps(self, tmp_path, mock_yt_dlp, mock_subprocess):
         """Test parsing fractional FPS like 30000/1001."""
