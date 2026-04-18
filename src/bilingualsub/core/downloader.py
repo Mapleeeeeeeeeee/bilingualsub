@@ -112,8 +112,11 @@ def download_video(
             output_path.unlink()
         raise DownloadError(f"Failed to extract metadata: {e}") from e
 
-    # yt-dlp's description is not reliably available in ffprobe output.
-    # Always prefer the description extracted from info_dict.
+    # yt-dlp's title and description are not reliably present in MP4 container
+    # tags (ffprobe reads those). Prefer the upstream metadata from info_dict.
+    info_title = info_dict.get("title")
+    if isinstance(info_title, str) and info_title.strip():
+        metadata.title = info_title.strip()
     metadata.description = _sanitize_description(info_dict.get("description", ""))
 
     return metadata
