@@ -71,8 +71,8 @@ def download_youtube_video(
     if not url.strip():
         raise ValueError("URL cannot be empty")
 
-    if not _is_youtube_url(url):
-        raise ValueError(f"Not a valid YouTube URL: {url}")
+    if not _is_supported_url(url):
+        raise ValueError(f"此網址目前的下載器(yt-dlp)無法處理: {url}")
 
     if not output_path.parent.exists():
         raise ValueError(f"Output directory does not exist: {output_path.parent}")
@@ -127,15 +127,11 @@ def _sanitize_description(raw: Any) -> str:
     return raw.strip()
 
 
-def _is_youtube_url(url: str) -> bool:
-    """Check if URL is a valid YouTube URL."""
-    youtube_domains = [
-        "youtube.com",
-        "www.youtube.com",
-        "m.youtube.com",
-        "youtu.be",
-    ]
-    return any(domain in url for domain in youtube_domains)
+def _is_supported_url(url: str) -> bool:
+    """Check if yt-dlp has a dedicated extractor for this URL."""
+    from yt_dlp.extractor import gen_extractors  # noqa: PLC0415
+
+    return any(ie.suitable(url) for ie in gen_extractors() if ie.IE_NAME != "generic")
 
 
 def _download_video(

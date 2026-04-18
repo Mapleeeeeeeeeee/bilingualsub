@@ -237,7 +237,7 @@ async def _acquire_video(
 
     metadata = await asyncio.to_thread(
         download_youtube_video,
-        job.youtube_url,
+        job.source_url,
         video_path,
         on_progress=_on_download_progress,
         start_time=job.start_time,

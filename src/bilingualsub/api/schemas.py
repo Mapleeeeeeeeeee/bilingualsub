@@ -10,7 +10,7 @@ from bilingualsub.api.constants import FileType, JobStatus
 class JobCreateRequest(BaseModel):
     """Request body for creating a new subtitle generation job."""
 
-    youtube_url: HttpUrl
+    source_url: HttpUrl
     source_lang: str = "en"
     target_lang: str = "zh-TW"
     start_time: float | None = None

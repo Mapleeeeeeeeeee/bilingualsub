@@ -72,14 +72,14 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
       return;
     }
 
-    const youtubePattern = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)/;
-    if (!youtubePattern.test(url)) {
+    const urlPattern = /^https?:\/\/.+/;
+    if (!urlPattern.test(url)) {
       setError(t('error.invalid_url'));
       return;
     }
 
     const request: JobCreateRequest = {
-      youtube_url: url,
+      source_url: url,
     };
     if (startSeconds !== undefined) request.start_time = startSeconds;
     if (endSeconds !== undefined) request.end_time = endSeconds;

@@ -16,7 +16,7 @@ from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 def _make_job_with_time_range() -> Job:
     return Job(
         id="test456",
-        youtube_url="https://youtube.com/watch?v=test",
+        source_url="https://youtube.com/watch?v=test",
         source_lang="en",
         target_lang="zh-TW",
         start_time=10.0,
@@ -27,7 +27,7 @@ def _make_job_with_time_range() -> Job:
 def _make_job() -> Job:
     return Job(
         id="test123",
-        youtube_url="https://youtube.com/watch?v=test",
+        source_url="https://youtube.com/watch?v=test",
         source_lang="en",
         target_lang="zh-TW",
     )

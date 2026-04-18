@@ -1,7 +1,7 @@
 import type { FileType, JobStatus } from './constants';
 
 export interface JobCreateRequest {
-  youtube_url: string;
+  source_url: string;
   source_lang?: string;
   target_lang?: string;
   start_time?: number; // seconds

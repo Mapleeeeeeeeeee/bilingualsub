@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "BilingualSub",
-    "subtitle": "YouTube 雙語字幕自動生成工具",
+    "subtitle": "多平台雙語字幕自動生成工具",
     "processing_title": "影片處理中",
     "processing_desc": "請稍候，我們正在進行語音辨識與翻譯。",
     "error_title": "發生錯誤",
@@ -17,8 +17,8 @@
     "download_audio": "下載音訊"
   },
   "form": {
-    "url_placeholder": "貼上 YouTube 影片網址",
-    "paste_placeholder": "貼上 YouTube 網址...",
+    "url_placeholder": "貼上影片網址（YouTube / X / Twitter / TikTok…）",
+    "paste_placeholder": "貼上影片網址（YouTube / X / Twitter / TikTok…）",
     "source_lang": "原始語言",
     "target_lang": "翻譯語言",
     "label_translate": "翻譯語言",
@@ -33,7 +33,7 @@
     "enable_range": "設定範圍",
     "disable_range": "取消範圍",
     "clear_range": "清除",
-    "inputModeUrl": "YouTube 網址",
+    "inputModeUrl": "影片網址",
     "inputModeFile": "上傳檔案",
     "filePlaceholder": "選擇影片或音訊檔案",
     "fileSelected": "已選擇：{{filename}}"
@@ -66,7 +66,7 @@
     "unsupported": "您的瀏覽器不支援影片播放"
   },
   "error": {
-    "invalid_url": "請輸入有效的 YouTube 網址",
+    "invalid_url": "請輸入有效的影片網址",
     "job_not_found": "找不到此任務",
     "download_failed": "影片下載失敗",
     "transcription_failed": "語音辨識失敗",

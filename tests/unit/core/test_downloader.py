@@ -10,6 +10,7 @@ import pytest
 from bilingualsub.core.downloader import (
     DownloadError,
     VideoMetadata,
+    _is_supported_url,
     download_youtube_video,
 )
 
@@ -247,10 +248,12 @@ class TestDownloadYoutubeVideo:
         with pytest.raises(ValueError, match="URL cannot be empty"):
             download_youtube_video("   ", tmp_path / "video.mp4")
 
-    def test_non_youtube_url_raises_error(self, tmp_path):
-        """Test that non-YouTube URL raises error."""
-        with pytest.raises(ValueError, match="Not a valid YouTube URL"):
-            download_youtube_video("https://vimeo.com/123456", tmp_path / "video.mp4")
+    def test_unsupported_url_raises_error(self, tmp_path):
+        """Test that a URL with no dedicated yt-dlp extractor raises error."""
+        with pytest.raises(ValueError, match="yt-dlp"):
+            download_youtube_video(
+                "https://example.com/random.html", tmp_path / "video.mp4"
+            )
 
     def test_output_directory_not_exists_raises_error(self):
         """Test that non-existent output directory raises error."""
@@ -837,3 +840,35 @@ class TestDownloadWithTimeRange:
 
         # Duration should be calculated as (end - start)
         assert metadata.duration == 60.0
+
+
+@pytest.mark.unit
+class TestIsSupportedUrl:
+    """Test cases for _is_supported_url using real yt-dlp extractor registry."""
+
+    def test_youtube_watch_url_supported(self) -> None:
+        assert _is_supported_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is True
+
+    def test_youtu_be_short_url_supported(self) -> None:
+        assert _is_supported_url("https://youtu.be/dQw4w9WgXcQ") is True
+
+    def test_x_com_url_supported(self) -> None:
+        assert _is_supported_url("https://x.com/user/status/123456789012345678") is True
+
+    def test_twitter_com_url_supported(self) -> None:
+        assert (
+            _is_supported_url("https://twitter.com/user/status/123456789012345678")
+            is True
+        )
+
+    def test_tiktok_url_supported(self) -> None:
+        assert (
+            _is_supported_url("https://www.tiktok.com/@user/video/1234567890123456789")
+            is True
+        )
+
+    def test_generic_webpage_not_supported(self) -> None:
+        assert _is_supported_url("https://example.com/random.html") is False
+
+    def test_non_url_string_not_supported(self) -> None:
+        assert _is_supported_url("not-a-url") is False

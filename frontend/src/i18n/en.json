@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "BilingualSub",
-    "subtitle": "YouTube Bilingual Subtitle Generator",
+    "subtitle": "Bilingual Subtitle Generator for YouTube, X, TikTok & More",
     "processing_title": "Processing Video",
     "processing_desc": "Please wait while we transcribe and translate.",
     "error_title": "Something went wrong",
@@ -17,8 +17,8 @@
     "download_audio": "Download Audio"
   },
   "form": {
-    "url_placeholder": "Paste YouTube video URL",
-    "paste_placeholder": "Paste YouTube URL...",
+    "url_placeholder": "Paste video URL (YouTube / X / Twitter / TikTok…)",
+    "paste_placeholder": "Paste video URL (YouTube / X / Twitter / TikTok…)",
     "source_lang": "Source Language",
     "target_lang": "Target Language",
     "label_translate": "Translate",
@@ -33,7 +33,7 @@
     "enable_range": "Set Range",
     "disable_range": "Disable Range",
     "clear_range": "Clear",
-    "inputModeUrl": "YouTube URL",
+    "inputModeUrl": "Video URL",
     "inputModeFile": "Upload File",
     "filePlaceholder": "Choose a video or audio file",
     "fileSelected": "Selected: {{filename}}"
@@ -66,7 +66,7 @@
     "unsupported": "Your browser does not support video playback"
   },
   "error": {
-    "invalid_url": "Please enter a valid YouTube URL",
+    "invalid_url": "Please enter a valid video URL",
     "job_not_found": "Job not found",
     "download_failed": "Video download failed",
     "transcription_failed": "Transcription failed",
