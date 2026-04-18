@@ -66,7 +66,7 @@ class TestRunPipeline:
     @patch("bilingualsub.api.pipeline.translate_subtitle")
     @patch("bilingualsub.api.pipeline.transcribe_audio")
     @patch("bilingualsub.api.pipeline.extract_audio")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_successful_pipeline(
         self,
         mock_download,
@@ -108,7 +108,7 @@ class TestRunPipeline:
         assert "on_progress" in translate_call_kwargs
         assert callable(translate_call_kwargs["on_progress"])
 
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_download_error(self, mock_download) -> None:
         mock_download.side_effect = DownloadError("Network error")
 
@@ -131,7 +131,7 @@ class TestRunPipeline:
     @patch("bilingualsub.api.pipeline.translate_subtitle")
     @patch("bilingualsub.api.pipeline.transcribe_audio")
     @patch("bilingualsub.api.pipeline.extract_audio")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_transcribe_receives_audio_path(
         self,
         mock_download,
@@ -173,7 +173,7 @@ class TestRunPipeline:
     @patch("bilingualsub.api.pipeline.transcribe_audio")
     @patch("bilingualsub.api.pipeline.extract_audio")
     @patch("bilingualsub.api.pipeline.trim_video")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_pipeline_with_time_range_calls_trim(
         self,
         mock_download,
@@ -186,7 +186,7 @@ class TestRunPipeline:
         mock_serialize_ass,
         mock_burn,
     ) -> None:
-        """Given job with time range, download_youtube_video should receive time parameters."""
+        """Given job with time range, download_video should receive time parameters."""
         sub = _make_subtitle()
         mock_download.return_value = _make_metadata()
         mock_transcribe.return_value = sub
@@ -217,7 +217,7 @@ class TestRunPipeline:
     @patch("bilingualsub.api.pipeline.transcribe_audio")
     @patch("bilingualsub.api.pipeline.extract_audio")
     @patch("bilingualsub.api.pipeline.trim_video")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_pipeline_without_time_range_skips_trim(
         self,
         mock_download,
@@ -250,7 +250,7 @@ class TestRunPipeline:
 @pytest.mark.asyncio
 class TestRunDownload:
     @patch("bilingualsub.api.pipeline.extract_audio")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_run_download_sends_download_complete(
         self, mock_download, mock_extract_audio
     ) -> None:
@@ -270,7 +270,7 @@ class TestRunDownload:
         assert job.status == JobStatus.DOWNLOAD_COMPLETE
 
     @patch("bilingualsub.api.pipeline.extract_audio")
-    @patch("bilingualsub.api.pipeline.download_youtube_video")
+    @patch("bilingualsub.api.pipeline.download_video")
     async def test_run_download_saves_metadata(
         self, mock_download, mock_extract_audio
     ) -> None:

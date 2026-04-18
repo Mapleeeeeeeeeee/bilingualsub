@@ -2,13 +2,15 @@
 
 from typing import Self
 
-from pydantic import BaseModel, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 
 from bilingualsub.api.constants import FileType, JobStatus
 
 
 class JobCreateRequest(BaseModel):
     """Request body for creating a new subtitle generation job."""
+
+    model_config = ConfigDict(extra="forbid")
 
     source_url: HttpUrl
     source_lang: str = "en"

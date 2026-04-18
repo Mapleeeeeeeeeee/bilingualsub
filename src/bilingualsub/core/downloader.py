@@ -1,4 +1,4 @@
-"""YouTube video downloader with metadata extraction."""
+"""Video downloader (via yt-dlp) with metadata extraction."""
 
 import json
 import os
@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yt_dlp
+from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.utils import download_range_func
 
 
@@ -43,7 +44,7 @@ class VideoMetadata:
         self.description = _sanitize_description(self.description)
 
 
-def download_youtube_video(
+def download_video(
     url: str,
     output_path: Path,
     on_progress: Callable[[float, float], None] | None = None,
@@ -51,10 +52,10 @@ def download_youtube_video(
     end_time: float | None = None,
 ) -> VideoMetadata:
     """
-    Download YouTube video and extract metadata.
+    Download video and extract metadata.
 
     Args:
-        url: YouTube video URL
+        url: Video URL supported by yt-dlp
         output_path: Path where video will be saved (including extension)
         on_progress: Optional callback for download progress
             (downloaded_bytes, total_bytes)
@@ -72,7 +73,7 @@ def download_youtube_video(
         raise ValueError("URL cannot be empty")
 
     if not _is_supported_url(url):
-        raise ValueError(f"此網址目前的下載器(yt-dlp)無法處理: {url}")
+        raise ValueError(f"URL not supported by downloader (yt-dlp): {url}")
 
     if not output_path.parent.exists():
         raise ValueError(f"Output directory does not exist: {output_path.parent}")
@@ -80,7 +81,6 @@ def download_youtube_video(
     if output_path.exists():
         raise ValueError(f"Output file already exists: {output_path}")
 
-    # Download video and get info_dict
     try:
         info_dict = _download_video(
             url,
@@ -92,7 +92,6 @@ def download_youtube_video(
     except Exception as e:
         raise DownloadError(f"Failed to download video: {e}") from e
 
-    # Extract metadata - try FFprobe first, fallback to info_dict
     try:
         metadata = _extract_metadata_with_ffprobe(output_path)
     except (FileNotFoundError, OSError, subprocess.CalledProcessError):
@@ -127,11 +126,14 @@ def _sanitize_description(raw: Any) -> str:
     return raw.strip()
 
 
+_SUPPORTED_EXTRACTOR_CLASSES: list[Any] = [
+    cls for cls in gen_extractor_classes() if cls.IE_NAME != "generic"
+]
+
+
 def _is_supported_url(url: str) -> bool:
     """Check if yt-dlp has a dedicated extractor for this URL."""
-    from yt_dlp.extractor import gen_extractors  # noqa: PLC0415
-
-    return any(ie.suitable(url) for ie in gen_extractors() if ie.IE_NAME != "generic")
+    return any(cls.suitable(url) for cls in _SUPPORTED_EXTRACTOR_CLASSES)
 
 
 def _download_video(

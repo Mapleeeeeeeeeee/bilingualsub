@@ -252,13 +252,7 @@ class TestSanitizeFilename:
         assert _sanitize_filename("   ") == "video"
 
     def test_strips_illegal_chars(self) -> None:
-        result = _sanitize_filename('My: <video> / test"')
-        assert "<" not in result
-        assert ">" not in result
-        assert ":" not in result
-        assert '"' not in result
-        assert "/" not in result
-        assert len(result) > 0
+        assert _sanitize_filename('My: <video> / test"') == "My video  test"
 
     def test_truncates_to_120_chars(self) -> None:
         long_name = "a" * 200
@@ -293,6 +287,7 @@ class TestBuildDownloadFilename:
         assert ":" not in result
         assert "<" not in result
         assert ">" not in result
+        assert result.startswith("My")
         assert result.endswith("(en_to_zh-TW).srt")
 
     def test_source_video_always_original(self) -> None:

@@ -23,7 +23,7 @@ from bilingualsub.core import (
     TranscriptionError,
     TranslationError,
     VideoMetadata,
-    download_youtube_video,
+    download_video,
     merge_subtitles,
     transcribe_audio,
     translate_subtitle,
@@ -236,7 +236,7 @@ async def _acquire_video(
             loop.call_soon_threadsafe(_put_event)
 
     metadata = await asyncio.to_thread(
-        download_youtube_video,
+        download_video,
         job.source_url,
         video_path,
         on_progress=_on_download_progress,

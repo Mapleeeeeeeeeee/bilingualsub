@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from bilingualsub.core.downloader import DownloadError, download_youtube_video
+from bilingualsub.core.downloader import DownloadError, download_video
 from bilingualsub.core.merger import merge_subtitles
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.transcriber import transcribe_audio
@@ -82,7 +82,7 @@ class TestBilingualSubWorkflow:
         return output_dir
 
     @pytest.mark.subtitle_only
-    def test_download_youtube_video(self, e2e_output_dir: Path) -> None:
+    def test_download_video(self, e2e_output_dir: Path) -> None:
         """Test downloading a YouTube video.
 
         Given a valid YouTube URL,
@@ -93,7 +93,7 @@ class TestBilingualSubWorkflow:
         """
         output_path = e2e_output_dir / "test_video.mp4"
 
-        metadata = download_youtube_video(TEST_YOUTUBE_URL, output_path)
+        metadata = download_video(TEST_YOUTUBE_URL, output_path)
 
         assert output_path.exists()
         assert output_path.stat().st_size > 0
@@ -114,7 +114,7 @@ class TestBilingualSubWorkflow:
         """
         # Download video first
         video_path = e2e_output_dir / "test_video.mp4"
-        download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        download_video(TEST_YOUTUBE_URL, video_path)
 
         # Transcribe
         subtitle = transcribe_audio(video_path, language="en")
@@ -134,7 +134,7 @@ class TestBilingualSubWorkflow:
         """
         # Download and transcribe
         video_path = e2e_output_dir / "test_video.mp4"
-        download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        download_video(TEST_YOUTUBE_URL, video_path)
         original = transcribe_audio(video_path, language="en")
 
         # Translate
@@ -158,7 +158,7 @@ class TestBilingualSubWorkflow:
         """
         # Full pipeline up to merge
         video_path = e2e_output_dir / "test_video.mp4"
-        download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        download_video(TEST_YOUTUBE_URL, video_path)
         original = transcribe_audio(video_path, language="en")
         translated = translate_subtitle(original, source_lang="en", target_lang="zh-TW")
 
@@ -182,7 +182,7 @@ class TestBilingualSubWorkflow:
         srt_path = e2e_output_dir / "bilingual.srt"
 
         # Step 1: Download
-        download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        download_video(TEST_YOUTUBE_URL, video_path)
         assert video_path.exists()
 
         # Step 2: Transcribe
@@ -220,7 +220,7 @@ class TestBilingualSubWorkflow:
         ass_path = e2e_output_dir / "bilingual.ass"
 
         # Full pipeline
-        metadata = download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        metadata = download_video(TEST_YOUTUBE_URL, video_path)
         original = transcribe_audio(video_path, language="en")
         translated = translate_subtitle(original, source_lang="en", target_lang="zh-TW")
 
@@ -260,7 +260,7 @@ class TestBilingualSubWorkflow:
         output_video_path = e2e_output_dir / "output_with_subs.mp4"
 
         # Full pipeline
-        metadata = download_youtube_video(TEST_YOUTUBE_URL, video_path)
+        metadata = download_video(TEST_YOUTUBE_URL, video_path)
         original = transcribe_audio(video_path, language="en")
         translated = translate_subtitle(original, source_lang="en", target_lang="zh-TW")
 
@@ -295,7 +295,7 @@ class TestWorkflowEdgeCases:
         output_path = tmp_path / "video.mp4"
 
         with pytest.raises((ValueError, DownloadError)):
-            download_youtube_video("https://invalid-url.com/video", output_path)
+            download_video("https://invalid-url.com/video", output_path)
 
     def test_missing_api_key_raises_error(self, tmp_path: Path, monkeypatch) -> None:
         """Test that missing API key raises appropriate error."""

@@ -7,7 +7,7 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import structlog
 from fastapi import APIRouter, Form, Request, UploadFile
@@ -54,20 +54,22 @@ _ALLOWED_UPLOAD_EXTENSIONS = {
     ".webm",
 }
 
-_EXTENSIONS: dict[FileType, str] = {
-    FileType.SRT: "srt",
-    FileType.ASS: "ass",
-    FileType.VIDEO: "mp4",
-    FileType.AUDIO: "mp3",
-    FileType.SOURCE_VIDEO: "mp4",
-}
+_DEFAULT_FILENAME = "video"
+_SUFFIX_ORIGINAL = "(original)"
+_LANG_SEPARATOR = "_to_"
 
-_MEDIA_TYPES: dict[FileType, str] = {
-    FileType.SRT: "text/plain",
-    FileType.ASS: "text/plain",
-    FileType.VIDEO: "video/mp4",
-    FileType.AUDIO: "audio/mpeg",
-    FileType.SOURCE_VIDEO: "video/mp4",
+
+class _FileMeta(NamedTuple):
+    ext: str
+    media_type: str
+
+
+_FILE_META: dict[FileType, _FileMeta] = {
+    FileType.SRT: _FileMeta("srt", "text/plain"),
+    FileType.ASS: _FileMeta("ass", "text/plain"),
+    FileType.VIDEO: _FileMeta("mp4", "video/mp4"),
+    FileType.AUDIO: _FileMeta("mp3", "audio/mpeg"),
+    FileType.SOURCE_VIDEO: _FileMeta("mp4", "video/mp4"),
 }
 
 _FILENAME_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -76,22 +78,23 @@ _FILENAME_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 def _sanitize_filename(name: str) -> str:
     """Remove filesystem-unsafe characters and truncate to 120 chars."""
     cleaned = _FILENAME_BAD_CHARS.sub("", name).strip(" .")
-    return (cleaned or "video")[:120]
+    truncated = (cleaned or _DEFAULT_FILENAME)[:120]
+    return truncated.rstrip(" .") or _DEFAULT_FILENAME
 
 
 def _build_download_filename(job: Job, file_type: FileType) -> str:
     """Build a human-readable download filename for the given job and file type."""
-    base = _sanitize_filename(job.video_title or "video")
+    base = _sanitize_filename(job.video_title or _DEFAULT_FILENAME)
     original_only = file_type in (FileType.SOURCE_VIDEO, FileType.AUDIO)
     same_lang = (
         not job.source_lang or not job.target_lang or job.source_lang == job.target_lang
     )
     suffix = (
-        "(original)"
+        _SUFFIX_ORIGINAL
         if original_only or same_lang
-        else f"({job.source_lang}_to_{job.target_lang})"
+        else f"({job.source_lang}{_LANG_SEPARATOR}{job.target_lang})"
     )
-    ext = _EXTENSIONS[file_type]
+    ext = _FILE_META[file_type].ext
     return f"{base} {suffix}.{ext}"
 
 
@@ -255,7 +258,7 @@ async def download_file(job_id: str, file_type: str, request: Request) -> FileRe
 
     return FileResponse(
         path=path,
-        media_type=_MEDIA_TYPES[ft],
+        media_type=_FILE_META[ft].media_type,
         filename=_build_download_filename(job, ft),
     )
 
