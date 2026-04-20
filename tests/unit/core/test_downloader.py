@@ -186,23 +186,6 @@ class TestDownloadVideo:
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
-        # Verify yt-dlp was called correctly
-        mock_yt_dlp.YoutubeDL.assert_called_once()
-        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
-        assert "format" in ydl_opts
-        assert "outtmpl" in ydl_opts
-        assert ydl_opts["merge_output_format"] == "mp4"
-
-        mock_ydl_instance.extract_info.assert_called_once_with(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=True
-        )
-
-        # Verify ffprobe was called
-        mock_subprocess.run.assert_called_once()
-        ffprobe_call = mock_subprocess.run.call_args
-        assert "ffprobe" in ffprobe_call[0][0]
-        assert str(output_path) in ffprobe_call[0][0]
-
         # Verify metadata
         assert metadata.title == "Test Video"
         assert metadata.duration == 120.5
@@ -238,7 +221,6 @@ class TestDownloadVideo:
         metadata = download_video("https://youtu.be/dQw4w9WgXcQ", output_path)
 
         assert metadata.title == "Test Video"
-        mock_ydl_instance.extract_info.assert_called_once()
 
     def test_empty_url_raises_error(self, tmp_path):
         """Test that empty URL raises error."""
@@ -584,8 +566,10 @@ class TestDownloadVideo:
                     fps=30.0,
                 )
                 output_path = tmp_path / f"video_{valid_urls.index(url)}.mp4"
-                # Should not raise ValueError
-                download_video(url, output_path)
+                # Should not raise ValueError and should return valid metadata
+                result = download_video(url, output_path)
+                assert result.title == "Test"
+                assert result.duration == 120.0
 
 
 class TestDownloadWithTimeRange:

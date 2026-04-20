@@ -6,6 +6,7 @@ import shutil
 import subprocess  # nosec B404
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -100,7 +101,7 @@ def download_video(
             metadata = _extract_metadata_from_info_dict(
                 info_dict, output_path, start_time, end_time
             )
-        except Exception as e:
+        except (DownloadError, ValueError, KeyError, TypeError) as e:
             # Clean up downloaded file on metadata extraction failure
             if output_path.exists():
                 output_path.unlink()
@@ -129,14 +130,15 @@ def _sanitize_description(raw: Any) -> str:
     return raw.strip()
 
 
-_SUPPORTED_EXTRACTOR_CLASSES: list[Any] = [
+_SUPPORTED_EXTRACTOR_CLASSES: list[type] = [
     cls for cls in gen_extractor_classes() if cls.IE_NAME != "generic"
 ]
 
 
+@lru_cache(maxsize=256)
 def _is_supported_url(url: str) -> bool:
     """Check if yt-dlp has a dedicated extractor for this URL."""
-    return any(cls.suitable(url) for cls in _SUPPORTED_EXTRACTOR_CLASSES)
+    return any(cls.suitable(url) for cls in _SUPPORTED_EXTRACTOR_CLASSES)  # type: ignore[attr-defined]
 
 
 def _download_video(

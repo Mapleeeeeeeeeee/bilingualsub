@@ -216,13 +216,13 @@ class TestFullSubtitlePipeline:
         # Verify dialogue line format
         assert "Dialogue: 0," in written
 
-    def test_pipeline_metadata_flows_from_downloader_to_ass_serializer(
+    def test_ass_output_uses_fixed_playres_regardless_of_video_resolution(
         self,
         tmp_path: Path,
         set_fake_api_key: None,
         sample_whisper_api_response,
     ) -> None:
-        """VideoMetadata width/height flows correctly to ASS PlayResX/PlayResY across resolutions."""
+        """PlayRes is fixed at 1920x1080 for consistent rendering, regardless of input resolution."""
         resolutions = [
             (1920, 1080, "1080p"),
             (1280, 720, "720p"),

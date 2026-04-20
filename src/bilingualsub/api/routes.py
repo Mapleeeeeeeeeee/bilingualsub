@@ -72,7 +72,10 @@ _FILE_META: dict[FileType, _FileMeta] = {
     FileType.SOURCE_VIDEO: _FileMeta("mp4", "video/mp4"),
 }
 
+# Windows-reserved + POSIX control characters (NTFS/FAT32/ext4 safe)
 _FILENAME_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+_MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def _sanitize_filename(name: str) -> str:
@@ -148,7 +151,6 @@ async def create_job_from_upload(
     request: Request,
 ) -> JobCreateResponse:
     """Create a subtitle generation job from an uploaded file."""
-    # Validate file extension
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
     if suffix not in _ALLOWED_UPLOAD_EXTENSIONS:
@@ -157,11 +159,9 @@ async def create_job_from_upload(
             detail=f"Allowed: {', '.join(sorted(_ALLOWED_UPLOAD_EXTENSIONS))}",
         )
 
-    # Sanitize filename to prevent path traversal
     safe_name = Path(filename).name or f"upload{suffix}"
 
-    # Save uploaded file to temp directory with size limit
-    max_size = 500 * 1024 * 1024  # 500 MB
+    max_size = _MAX_UPLOAD_BYTES
     tmp_dir = Path(tempfile.mkdtemp(prefix="bilingualsub_upload_"))
     saved_path = tmp_dir / safe_name
     bytes_written = 0

@@ -17,7 +17,6 @@
     "download_audio": "Download Audio"
   },
   "form": {
-    "url_placeholder": "Paste video URL (YouTube / X / Twitter / TikTok…)",
     "paste_placeholder": "Paste video URL (YouTube / X / Twitter / TikTok…)",
     "source_lang": "Source Language",
     "target_lang": "Target Language",

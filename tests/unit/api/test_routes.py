@@ -261,6 +261,14 @@ class TestSanitizeFilename:
     def test_strips_leading_trailing_dots_and_spaces(self) -> None:
         assert _sanitize_filename("  .hello.  ") == "hello"
 
+    def test_sanitize_all_bad_chars_returns_default(self) -> None:
+        result = _sanitize_filename(":::")
+        assert result == "video"
+
+    def test_sanitize_dots_only_returns_default(self) -> None:
+        result = _sanitize_filename("...")
+        assert result == "video"
+
 
 @pytest.mark.unit
 class TestBuildDownloadFilename:
@@ -281,14 +289,10 @@ class TestBuildDownloadFilename:
 
     def test_title_with_illegal_chars_stripped(self) -> None:
         job = _make_job(
-            title="My: <video> / test", source_lang="en", target_lang="zh-TW"
+            title='My: <video> / test"', source_lang="en", target_lang="zh-TW"
         )
         result = _build_download_filename(job, FileType.SRT)
-        assert ":" not in result
-        assert "<" not in result
-        assert ">" not in result
-        assert result.startswith("My")
-        assert result.endswith("(en_to_zh-TW).srt")
+        assert result == "My video  test (en_to_zh-TW).srt"
 
     def test_source_video_always_original(self) -> None:
         job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")

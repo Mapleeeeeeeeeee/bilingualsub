@@ -17,7 +17,6 @@
     "download_audio": "下載音訊"
   },
   "form": {
-    "url_placeholder": "貼上影片網址（YouTube / X / Twitter / TikTok…）",
     "paste_placeholder": "貼上影片網址（YouTube / X / Twitter / TikTok…）",
     "source_lang": "原始語言",
     "target_lang": "翻譯語言",
