@@ -1,16 +1,18 @@
 import { useTranslation } from 'react-i18next';
-import { PIPELINE_STEPS, type JobStatus } from '../constants';
+import { PIPELINE_STEPS, SubtitleSource, type JobStatus } from '../constants';
 
 interface ProgressTrackerProps {
   status: JobStatus | null;
   progress: number;
   currentStep: string | null;
+  subtitleSource?: string;
   steps?: readonly JobStatus[];
 }
 
 export function ProgressTracker({
   status,
   progress,
+  subtitleSource,
   steps = PIPELINE_STEPS,
 }: ProgressTrackerProps) {
   const { t } = useTranslation();
@@ -49,6 +51,17 @@ export function ProgressTracker({
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {/* Subtitle source badge */}
+      {subtitleSource && (
+        <p className="text-center text-xs text-gray-400 tracking-wide">
+          {t('progress.subtitleSource')}
+          {': '}
+          {subtitleSource === SubtitleSource.YOUTUBE_MANUAL
+            ? t('progress.subtitleSourceYoutube')
+            : t('progress.subtitleSourceWhisper')}
+        </p>
+      )}
     </div>
   );
 }

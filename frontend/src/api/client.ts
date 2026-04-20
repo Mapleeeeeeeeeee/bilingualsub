@@ -1,5 +1,7 @@
 import { FileType } from '../constants';
 import type {
+  GlossaryEntry,
+  GlossaryListResponse,
   JobCreateRequest,
   JobCreateResponse,
   JobStatusResponse,
@@ -143,6 +145,48 @@ class ApiClient {
 
   getDownloadUrl(jobId: string, fileType: FileType): string {
     return `${this.baseUrl}/api/jobs/${jobId}/download/${fileType}`;
+  }
+
+  async getGlossary(): Promise<GlossaryEntry[]> {
+    const response = await fetch(`${this.baseUrl}/api/glossary`);
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    const data: GlossaryListResponse = await response.json();
+    return data.entries;
+  }
+
+  async addGlossaryEntry(source: string, target: string): Promise<GlossaryEntry> {
+    const response = await fetch(`${this.baseUrl}/api/glossary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, target }),
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.json();
+  }
+
+  async updateGlossaryEntry(source: string, target: string): Promise<GlossaryEntry> {
+    const response = await fetch(`${this.baseUrl}/api/glossary/${encodeURIComponent(source)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, target }),
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.json();
+  }
+
+  async deleteGlossaryEntry(source: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/glossary/${encodeURIComponent(source)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
   }
 }
 

@@ -64,6 +64,7 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
             />
           </div>
         )}
@@ -156,6 +157,7 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
               steps={SUBTITLE_STEPS}
             />
           </div>
@@ -225,6 +227,7 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
             />
           </div>
         )}

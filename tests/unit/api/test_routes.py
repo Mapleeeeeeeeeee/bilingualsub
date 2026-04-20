@@ -10,13 +10,15 @@ from bilingualsub.api.app import create_app
 from bilingualsub.api.constants import FileType, JobStatus
 from bilingualsub.api.jobs import Job, JobManager
 from bilingualsub.api.routes import _build_download_filename, _sanitize_filename
+from bilingualsub.core.glossary import GlossaryManager
 
 
 @pytest.fixture
-def app():
+def app(tmp_path):
     """Create a fresh app with manually initialised state."""
     application = create_app()
     application.state.job_manager = JobManager()
+    application.state.glossary_manager = GlossaryManager(tmp_path / "glossary.json")
     return application
 
 
@@ -80,7 +82,7 @@ class TestGetJobStatus:
         assert response.status_code == 200
         data = response.json()
         assert data["job_id"] == job_id
-        assert "status" in data
+        assert data["status"] == "pending"
 
     async def test_get_nonexistent_job(self, client: AsyncClient) -> None:
         response = await client.get("/api/jobs/nonexistent")
@@ -150,6 +152,7 @@ class TestStartSubtitle:
         response = await client.post(f"/api/jobs/{job_id}/subtitle")
         assert response.status_code == 200
         assert response.json()["status"] == "subtitle_started"
+        assert job.glossary_text == ""  # empty glossary yields empty string
 
     async def test_start_subtitle_with_language_override(
         self, client: AsyncClient, app
@@ -174,6 +177,7 @@ class TestStartSubtitle:
         assert response.json()["status"] == "subtitle_started"
         assert job.source_lang == "ja"
         assert job.target_lang == "ko"
+        assert job.glossary_text == ""
 
 
 @pytest.mark.unit
@@ -208,6 +212,8 @@ class TestPartialRetranslate:
         assert response.status_code == 200
         data = response.json()
         assert data["results"] == [{"index": 2, "translated": "修正版第二句"}]
+        call_kwargs = mock_retranslate.call_args.kwargs
+        assert call_kwargs["glossary_text"] == ""  # empty glossary
 
     async def test_partial_retranslate_requires_pipeline_complete(
         self, client: AsyncClient
@@ -318,3 +324,63 @@ class TestBuildDownloadFilename:
         job = _make_job(title="My Video", source_lang="", target_lang="zh-TW")
         result = _build_download_filename(job, FileType.SRT)
         assert result == "My Video (original).srt"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+class TestGlossaryRoutes:
+    async def test_list_empty_glossary(self, client: AsyncClient) -> None:
+        response = await client.get("/api/glossary")
+        assert response.status_code == 200
+        assert response.json() == {"entries": []}
+
+    async def test_add_glossary_entry(self, client: AsyncClient) -> None:
+        response = await client.post(
+            "/api/glossary",
+            json={"source": "Agent", "target": "Agent"},
+        )
+        assert response.status_code == 201
+        assert response.json() == {"source": "Agent", "target": "Agent"}
+
+    async def test_add_then_list(self, client: AsyncClient) -> None:
+        await client.post("/api/glossary", json={"source": "Agent", "target": "Agent"})
+        response = await client.get("/api/glossary")
+        entries = response.json()["entries"]
+        assert len(entries) == 1
+        assert entries[0]["source"] == "Agent"
+        assert entries[0]["target"] == "Agent"
+
+    async def test_update_glossary_entry(self, client: AsyncClient) -> None:
+        await client.post("/api/glossary", json={"source": "Agent", "target": "Agent"})
+        response = await client.put(
+            "/api/glossary/Agent",
+            json={"source": "Agent", "target": "代理"},
+        )
+        assert response.status_code == 200
+        assert response.json()["target"] == "代理"
+
+    async def test_update_nonexistent_returns_404(self, client: AsyncClient) -> None:
+        response = await client.put(
+            "/api/glossary/nope",
+            json={"source": "nope", "target": "value"},
+        )
+        assert response.status_code == 404
+
+    async def test_delete_glossary_entry(self, client: AsyncClient) -> None:
+        await client.post("/api/glossary", json={"source": "Agent", "target": "Agent"})
+        response = await client.delete("/api/glossary/Agent")
+        assert response.status_code == 204
+        list_response = await client.get("/api/glossary")
+        assert list_response.json()["entries"] == []
+
+    async def test_delete_nonexistent_returns_404(self, client: AsyncClient) -> None:
+        response = await client.delete("/api/glossary/nope")
+        assert response.status_code == 404
+
+    async def test_add_empty_source_returns_400(self, client: AsyncClient) -> None:
+        response = await client.post(
+            "/api/glossary",
+            json={"source": "", "target": "value"},
+        )
+        assert response.status_code == 400
+        assert response.json()["code"] == "GLOSSARY_ERROR"

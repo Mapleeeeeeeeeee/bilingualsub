@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BookOpen } from 'lucide-react';
 import { apiClient } from '@/api/client';
 import { FileType } from '@/constants';
 import { parseSrt, serializeSrt, srtTimeToSeconds, isValidSrtTime } from '@/utils/srt';
 import { triggerDownload } from '@/utils/download';
 import type { SrtEntry } from '@/types';
+import { GlossaryPanel } from './GlossaryPanel';
 
 interface SubtitleEditorProps {
   jobId: string;
@@ -35,6 +37,7 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
   const [retranslateChoices, setRetranslateChoices] = useState<Record<number, RetranslateChoice>>(
     {}
   );
+  const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<TextTrack | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -351,6 +354,17 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
           <h3 className="text-2xl font-serif">{t('editor.title')}</h3>
           <div className="flex flex-wrap items-center gap-4">
             <button
+              onClick={() => setIsGlossaryOpen(!isGlossaryOpen)}
+              className={`flex items-center gap-2 text-sm uppercase tracking-widest border px-4 py-2 rounded transition-colors ${
+                isGlossaryOpen
+                  ? 'bg-black text-white border-black'
+                  : 'border-black hover:bg-black hover:text-white'
+              }`}
+            >
+              <BookOpen className="h-4 w-4" />
+              {t('glossary.title')}
+            </button>
+            <button
               onClick={handleReset}
               disabled={!hasEdits}
               className="text-sm uppercase tracking-widest hover:text-red-600 disabled:opacity-30 transition-colors"
@@ -379,6 +393,8 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
             </button>
           </div>
         </div>
+
+        {isGlossaryOpen && <GlossaryPanel />}
 
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-3">
           <p className="text-xs text-gray-500 self-center">

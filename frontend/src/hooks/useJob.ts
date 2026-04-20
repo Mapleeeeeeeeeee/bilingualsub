@@ -19,6 +19,7 @@ interface JobState {
   status: JobStatus | null;
   progress: number;
   currentStep: string | null;
+  subtitleSource: string | null;
   error: { code: string; message: string; detail?: string } | null;
 }
 
@@ -44,6 +45,7 @@ const initialState: JobState = {
   status: null,
   progress: 0,
   currentStep: null,
+  subtitleSource: null,
   error: null,
 };
 
@@ -59,6 +61,7 @@ function jobReducer(state: JobState, action: JobAction): JobState {
         status: action.data.status,
         progress: action.data.progress,
         currentStep: action.data.current_step,
+        subtitleSource: action.data.subtitle_source ?? state.subtitleSource,
       };
     case 'DOWNLOAD_COMPLETE':
       return {

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     transcriber_model: str = "whisper-large-v3-turbo"
 
     translator_model: str = "groq:openai/gpt-oss-120b"
+    glossary_path: str = "glossary.json"
 
     model_config = SettingsConfigDict(
         env_file=".env",

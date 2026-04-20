@@ -51,7 +51,10 @@
     "merging": "合併字幕中...",
     "burning": "燒錄字幕中...",
     "completed": "完成！",
-    "failed": "處理失敗"
+    "failed": "處理失敗",
+    "subtitleSource": "字幕來源",
+    "subtitleSourceYoutube": "YouTube（手動上傳）",
+    "subtitleSourceWhisper": "Whisper 語音辨識"
   },
   "download": {
     "title": "下載結果",
@@ -106,6 +109,22 @@
     "burn": "燒錄字幕",
     "burning": "燒錄中...",
     "deleteEntry": "刪除字幕"
+  },
+  "glossary": {
+    "title": "術語表",
+    "source": "原文",
+    "target": "譯文",
+    "add": "新增術語",
+    "edit": "編輯",
+    "delete": "刪除",
+    "save": "儲存",
+    "cancel": "取消",
+    "empty": "尚無術語，點擊上方按鈕新增",
+    "addToGlossary": "加入術語表",
+    "sourcePlaceholder": "原文詞彙",
+    "targetPlaceholder": "保留原文或自訂翻譯",
+    "confirmDelete": "確定刪除此術語？",
+    "full": "術語表已達上限"
   },
   "disclaimer": {
     "title": "下載前請閱讀",

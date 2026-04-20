@@ -51,7 +51,10 @@
     "merging": "Merging subtitles...",
     "burning": "Burning subtitles...",
     "completed": "Completed!",
-    "failed": "Processing failed"
+    "failed": "Processing failed",
+    "subtitleSource": "Source",
+    "subtitleSourceYoutube": "YouTube (manual)",
+    "subtitleSourceWhisper": "Whisper"
   },
   "download": {
     "title": "Download Results",
@@ -106,6 +109,22 @@
     "burn": "Burn Subtitles",
     "burning": "Burning...",
     "deleteEntry": "Delete entry"
+  },
+  "glossary": {
+    "title": "Glossary",
+    "source": "Source",
+    "target": "Target",
+    "add": "Add Term",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "empty": "No terms yet. Click the button above to add one.",
+    "addToGlossary": "Add to Glossary",
+    "sourcePlaceholder": "Source term",
+    "targetPlaceholder": "Keep original or custom translation",
+    "confirmDelete": "Delete this term?",
+    "full": "Glossary is full"
   },
   "disclaimer": {
     "title": "Please Read Before Downloading",

@@ -42,3 +42,9 @@ export const PIPELINE_STEPS = [
   JobStatus.TRANSLATING,
   JobStatus.MERGING,
 ] as const;
+
+export const SubtitleSource = {
+  WHISPER: 'whisper',
+  YOUTUBE_MANUAL: 'youtube_manual',
+} as const;
+export type SubtitleSource = (typeof SubtitleSource)[keyof typeof SubtitleSource];
