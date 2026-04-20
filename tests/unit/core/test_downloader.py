@@ -1,4 +1,4 @@
-"""Unit tests for YouTube video downloader."""
+"""Unit tests for video downloader."""
 
 import json
 import subprocess
@@ -10,7 +10,8 @@ import pytest
 from bilingualsub.core.downloader import (
     DownloadError,
     VideoMetadata,
-    download_youtube_video,
+    _is_supported_url,
+    download_video,
 )
 
 
@@ -111,8 +112,8 @@ class TestVideoMetadata:
             )
 
 
-class TestDownloadYoutubeVideo:
-    """Test cases for download_youtube_video function."""
+class TestDownloadVideo:
+    """Test cases for download_video function."""
 
     @pytest.fixture
     def mock_yt_dlp(self):
@@ -181,26 +182,9 @@ class TestDownloadYoutubeVideo:
         mock_subprocess.run.return_value = mock_result
 
         # Download video
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
-
-        # Verify yt-dlp was called correctly
-        mock_yt_dlp.YoutubeDL.assert_called_once()
-        ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
-        assert "format" in ydl_opts
-        assert "outtmpl" in ydl_opts
-        assert ydl_opts["merge_output_format"] == "mp4"
-
-        mock_ydl_instance.extract_info.assert_called_once_with(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", download=True
-        )
-
-        # Verify ffprobe was called
-        mock_subprocess.run.assert_called_once()
-        ffprobe_call = mock_subprocess.run.call_args
-        assert "ffprobe" in ffprobe_call[0][0]
-        assert str(output_path) in ffprobe_call[0][0]
 
         # Verify metadata
         assert metadata.title == "Test Video"
@@ -234,28 +218,27 @@ class TestDownloadYoutubeVideo:
         mock_result.stdout = valid_ffprobe_output
         mock_subprocess.run.return_value = mock_result
 
-        metadata = download_youtube_video("https://youtu.be/dQw4w9WgXcQ", output_path)
+        metadata = download_video("https://youtu.be/dQw4w9WgXcQ", output_path)
 
         assert metadata.title == "Test Video"
-        mock_ydl_instance.extract_info.assert_called_once()
 
     def test_empty_url_raises_error(self, tmp_path):
         """Test that empty URL raises error."""
         with pytest.raises(ValueError, match="URL cannot be empty"):
-            download_youtube_video("", tmp_path / "video.mp4")
+            download_video("", tmp_path / "video.mp4")
 
         with pytest.raises(ValueError, match="URL cannot be empty"):
-            download_youtube_video("   ", tmp_path / "video.mp4")
+            download_video("   ", tmp_path / "video.mp4")
 
-    def test_non_youtube_url_raises_error(self, tmp_path):
-        """Test that non-YouTube URL raises error."""
-        with pytest.raises(ValueError, match="Not a valid YouTube URL"):
-            download_youtube_video("https://vimeo.com/123456", tmp_path / "video.mp4")
+    def test_unsupported_url_raises_error(self, tmp_path):
+        """Test that a URL with no dedicated yt-dlp extractor raises error."""
+        with pytest.raises(ValueError, match="yt-dlp"):
+            download_video("https://example.com/random.html", tmp_path / "video.mp4")
 
     def test_output_directory_not_exists_raises_error(self):
         """Test that non-existent output directory raises error."""
         with pytest.raises(ValueError, match="Output directory does not exist"):
-            download_youtube_video(
+            download_video(
                 "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                 Path("/nonexistent/path/video.mp4"),
             )
@@ -266,9 +249,7 @@ class TestDownloadYoutubeVideo:
         output_path.touch()
 
         with pytest.raises(ValueError, match="Output file already exists"):
-            download_youtube_video(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-            )
+            download_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path)
 
     def test_yt_dlp_download_error_raises_download_error(
         self, tmp_path, mock_yt_dlp, mock_subprocess
@@ -281,9 +262,7 @@ class TestDownloadYoutubeVideo:
         mock_ydl_instance.extract_info.side_effect = Exception("Network error")
 
         with pytest.raises(DownloadError, match="Failed to download video"):
-            download_youtube_video(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-            )
+            download_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path)
 
     def test_ffprobe_error_falls_back_to_info_dict(
         self, tmp_path, mock_yt_dlp, mock_subprocess
@@ -311,7 +290,7 @@ class TestDownloadYoutubeVideo:
         mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
 
         # Should succeed using info_dict fallback
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
@@ -358,9 +337,7 @@ class TestDownloadYoutubeVideo:
 
         # DownloadError is caught by line 85's except block and re-raised
         with pytest.raises(DownloadError, match="Failed to extract metadata"):
-            download_youtube_video(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-            )
+            download_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path)
 
         # Verify file was cleaned up
         assert not output_path.exists()
@@ -392,17 +369,20 @@ class TestDownloadYoutubeVideo:
         mock_subprocess.run.return_value = mock_result
 
         with pytest.raises(DownloadError, match="Failed to extract metadata"):
-            download_youtube_video(
-                "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-            )
+            download_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path)
 
         # Verify file was cleaned up
         assert not output_path.exists()
 
-    def test_ffprobe_missing_title_uses_filename(
+    def test_info_dict_title_overrides_ffprobe(
         self, tmp_path, mock_yt_dlp, mock_subprocess
     ):
-        """Test that missing title in ffprobe uses filename as fallback."""
+        """info_dict.title is authoritative; ffprobe container tags are ignored.
+
+        MP4 container tags are usually empty for freshly-downloaded files, so
+        ffprobe would fall back to the filename stem. yt-dlp's info_dict carries
+        the real platform title (YouTube / X / TikTok), and that must win.
+        """
         output_path = tmp_path / "my_video.mp4"
 
         mock_ydl_instance = MagicMock()
@@ -411,7 +391,7 @@ class TestDownloadYoutubeVideo:
         def extract_info_side_effect(url, download=True):
             output_path.touch()
             return {
-                "title": "Test Video",
+                "title": "Real Platform Title",
                 "duration": 120.0,
                 "width": 1920,
                 "height": 1080,
@@ -420,7 +400,8 @@ class TestDownloadYoutubeVideo:
 
         mock_ydl_instance.extract_info.side_effect = extract_info_side_effect
 
-        # Mock ffprobe without title
+        # ffprobe returns no title (typical for fresh downloads) and would
+        # fall back to the filename stem "my_video" — but info_dict should win.
         mock_result = Mock()
         mock_result.stdout = json.dumps(
             {
@@ -434,17 +415,17 @@ class TestDownloadYoutubeVideo:
                 ],
                 "format": {
                     "duration": "120.5",
-                    "tags": {},  # No title
+                    "tags": {},
                 },
             }
         )
         mock_subprocess.run.return_value = mock_result
 
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
-        assert metadata.title == "my_video"
+        assert metadata.title == "Real Platform Title"
 
     def test_ffprobe_fractional_fps(self, tmp_path, mock_yt_dlp, mock_subprocess):
         """Test parsing fractional FPS like 30000/1001."""
@@ -485,7 +466,7 @@ class TestDownloadYoutubeVideo:
         )
         mock_subprocess.run.return_value = mock_result
 
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
@@ -517,7 +498,7 @@ class TestDownloadYoutubeVideo:
         mock_result.stdout = valid_ffprobe_output
         mock_subprocess.run.return_value = mock_result
 
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
@@ -554,9 +535,7 @@ class TestDownloadYoutubeVideo:
         mock_result.stdout = valid_ffprobe_output
         mock_subprocess.run.return_value = mock_result
 
-        download_youtube_video(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
-        )
+        download_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path)
 
         ydl_opts = mock_yt_dlp.YoutubeDL.call_args[0][0]
         assert ydl_opts["cookiefile"] == str(cookie_file)
@@ -587,8 +566,10 @@ class TestDownloadYoutubeVideo:
                     fps=30.0,
                 )
                 output_path = tmp_path / f"video_{valid_urls.index(url)}.mp4"
-                # Should not raise ValueError
-                download_youtube_video(url, output_path)
+                # Should not raise ValueError and should return valid metadata
+                result = download_video(url, output_path)
+                assert result.title == "Test"
+                assert result.duration == 120.0
 
 
 class TestDownloadWithTimeRange:
@@ -655,7 +636,7 @@ class TestDownloadWithTimeRange:
         mock_subprocess.run.return_value = mock_result
 
         # Download with time range
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             output_path,
             start_time=30.0,
@@ -698,7 +679,7 @@ class TestDownloadWithTimeRange:
         mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
 
         # Download with only start_time
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             output_path,
             start_time=30.0,
@@ -739,7 +720,7 @@ class TestDownloadWithTimeRange:
         mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
 
         # Download with only end_time
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             output_path,
             end_time=90.0,
@@ -781,7 +762,7 @@ class TestDownloadWithTimeRange:
         mock_subprocess.run.return_value = mock_result
 
         # Download without time range
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ", output_path
         )
 
@@ -820,7 +801,7 @@ class TestDownloadWithTimeRange:
         mock_subprocess.run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
 
         # Download with time range (fallback format)
-        metadata = download_youtube_video(
+        metadata = download_video(
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             output_path,
             start_time=30.0,
@@ -837,3 +818,35 @@ class TestDownloadWithTimeRange:
 
         # Duration should be calculated as (end - start)
         assert metadata.duration == 60.0
+
+
+@pytest.mark.unit
+class TestIsSupportedUrl:
+    """Test cases for _is_supported_url using real yt-dlp extractor registry."""
+
+    def test_youtube_watch_url_supported(self) -> None:
+        assert _is_supported_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is True
+
+    def test_youtu_be_short_url_supported(self) -> None:
+        assert _is_supported_url("https://youtu.be/dQw4w9WgXcQ") is True
+
+    def test_x_com_url_supported(self) -> None:
+        assert _is_supported_url("https://x.com/user/status/123456789012345678") is True
+
+    def test_twitter_com_url_supported(self) -> None:
+        assert (
+            _is_supported_url("https://twitter.com/user/status/123456789012345678")
+            is True
+        )
+
+    def test_tiktok_url_supported(self) -> None:
+        assert (
+            _is_supported_url("https://www.tiktok.com/@user/video/1234567890123456789")
+            is True
+        )
+
+    def test_generic_webpage_not_supported(self) -> None:
+        assert _is_supported_url("https://example.com/random.html") is False
+
+    def test_non_url_string_not_supported(self) -> None:
+        assert _is_supported_url("not-a-url") is False

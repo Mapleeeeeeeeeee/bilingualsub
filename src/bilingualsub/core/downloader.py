@@ -1,4 +1,4 @@
-"""YouTube video downloader with metadata extraction."""
+"""Video downloader (via yt-dlp) with metadata extraction."""
 
 import json
 import os
@@ -6,10 +6,12 @@ import shutil
 import subprocess  # nosec B404
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yt_dlp
+from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.utils import download_range_func
 
 
@@ -43,7 +45,7 @@ class VideoMetadata:
         self.description = _sanitize_description(self.description)
 
 
-def download_youtube_video(
+def download_video(
     url: str,
     output_path: Path,
     on_progress: Callable[[float, float], None] | None = None,
@@ -51,10 +53,10 @@ def download_youtube_video(
     end_time: float | None = None,
 ) -> VideoMetadata:
     """
-    Download YouTube video and extract metadata.
+    Download video and extract metadata.
 
     Args:
-        url: YouTube video URL
+        url: Video URL supported by yt-dlp
         output_path: Path where video will be saved (including extension)
         on_progress: Optional callback for download progress
             (downloaded_bytes, total_bytes)
@@ -71,8 +73,8 @@ def download_youtube_video(
     if not url.strip():
         raise ValueError("URL cannot be empty")
 
-    if not _is_youtube_url(url):
-        raise ValueError(f"Not a valid YouTube URL: {url}")
+    if not _is_supported_url(url):
+        raise ValueError(f"URL not supported by downloader (yt-dlp): {url}")
 
     if not output_path.parent.exists():
         raise ValueError(f"Output directory does not exist: {output_path.parent}")
@@ -80,7 +82,6 @@ def download_youtube_video(
     if output_path.exists():
         raise ValueError(f"Output file already exists: {output_path}")
 
-    # Download video and get info_dict
     try:
         info_dict = _download_video(
             url,
@@ -92,7 +93,6 @@ def download_youtube_video(
     except Exception as e:
         raise DownloadError(f"Failed to download video: {e}") from e
 
-    # Extract metadata - try FFprobe first, fallback to info_dict
     try:
         metadata = _extract_metadata_with_ffprobe(output_path)
     except (FileNotFoundError, OSError, subprocess.CalledProcessError):
@@ -101,7 +101,7 @@ def download_youtube_video(
             metadata = _extract_metadata_from_info_dict(
                 info_dict, output_path, start_time, end_time
             )
-        except Exception as e:
+        except (DownloadError, ValueError, KeyError, TypeError) as e:
             # Clean up downloaded file on metadata extraction failure
             if output_path.exists():
                 output_path.unlink()
@@ -113,8 +113,11 @@ def download_youtube_video(
             output_path.unlink()
         raise DownloadError(f"Failed to extract metadata: {e}") from e
 
-    # yt-dlp's description is not reliably available in ffprobe output.
-    # Always prefer the description extracted from info_dict.
+    # yt-dlp's title and description are not reliably present in MP4 container
+    # tags (ffprobe reads those). Prefer the upstream metadata from info_dict.
+    info_title = info_dict.get("title")
+    if isinstance(info_title, str) and info_title.strip():
+        metadata.title = info_title.strip()
     metadata.description = _sanitize_description(info_dict.get("description", ""))
 
     return metadata
@@ -127,15 +130,15 @@ def _sanitize_description(raw: Any) -> str:
     return raw.strip()
 
 
-def _is_youtube_url(url: str) -> bool:
-    """Check if URL is a valid YouTube URL."""
-    youtube_domains = [
-        "youtube.com",
-        "www.youtube.com",
-        "m.youtube.com",
-        "youtu.be",
-    ]
-    return any(domain in url for domain in youtube_domains)
+_SUPPORTED_EXTRACTOR_CLASSES: list[type] = [
+    cls for cls in gen_extractor_classes() if cls.IE_NAME != "generic"
+]
+
+
+@lru_cache(maxsize=256)
+def _is_supported_url(url: str) -> bool:
+    """Check if yt-dlp has a dedicated extractor for this URL."""
+    return any(cls.suitable(url) for cls in _SUPPORTED_EXTRACTOR_CLASSES)  # type: ignore[attr-defined]
 
 
 def _download_video(

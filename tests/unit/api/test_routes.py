@@ -8,7 +8,8 @@ from httpx import ASGITransport, AsyncClient
 
 from bilingualsub.api.app import create_app
 from bilingualsub.api.constants import FileType, JobStatus
-from bilingualsub.api.jobs import JobManager
+from bilingualsub.api.jobs import Job, JobManager
+from bilingualsub.api.routes import _build_download_filename, _sanitize_filename
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ class TestCreateJob:
     async def test_create_job_valid(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+            json={"source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -58,7 +59,7 @@ class TestCreateJob:
     async def test_create_job_invalid_url(self, client: AsyncClient) -> None:
         response = await client.post(
             "/api/jobs",
-            json={"youtube_url": "not-a-url"},
+            json={"source_url": "not-a-url"},
         )
         assert response.status_code == 422
 
@@ -70,7 +71,7 @@ class TestGetJobStatus:
         # First create a job
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -95,7 +96,7 @@ class TestDownload:
         # Create a job first
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -127,7 +128,7 @@ class TestStartSubtitle:
         """Should return 422 when job is not in download_complete state."""
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -138,7 +139,7 @@ class TestStartSubtitle:
         """Should start subtitle when job is download_complete."""
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -156,7 +157,7 @@ class TestStartSubtitle:
         """Should update source/target language when triggering subtitle."""
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -181,7 +182,7 @@ class TestPartialRetranslate:
     async def test_partial_retranslate_success(self, client: AsyncClient, app) -> None:
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -213,7 +214,7 @@ class TestPartialRetranslate:
     ) -> None:
         create_resp = await client.post(
             "/api/jobs",
-            json={"youtube_url": "https://www.youtube.com/watch?v=test123"},
+            json={"source_url": "https://www.youtube.com/watch?v=test123"},
         )
         job_id = create_resp.json()["job_id"]
 
@@ -227,3 +228,93 @@ class TestPartialRetranslate:
             },
         )
         assert response.status_code == 422
+
+
+def _make_job(
+    *,
+    title: str = "",
+    source_lang: str = "en",
+    target_lang: str = "zh-TW",
+) -> Job:
+    job = Job(id="testjob")
+    job.video_title = title
+    job.source_lang = source_lang
+    job.target_lang = target_lang
+    return job
+
+
+@pytest.mark.unit
+class TestSanitizeFilename:
+    def test_empty_string_returns_video(self) -> None:
+        assert _sanitize_filename("") == "video"
+
+    def test_whitespace_only_returns_video(self) -> None:
+        assert _sanitize_filename("   ") == "video"
+
+    def test_strips_illegal_chars(self) -> None:
+        assert _sanitize_filename('My: <video> / test"') == "My video  test"
+
+    def test_truncates_to_120_chars(self) -> None:
+        long_name = "a" * 200
+        assert len(_sanitize_filename(long_name)) == 120
+
+    def test_strips_leading_trailing_dots_and_spaces(self) -> None:
+        assert _sanitize_filename("  .hello.  ") == "hello"
+
+    def test_sanitize_all_bad_chars_returns_default(self) -> None:
+        result = _sanitize_filename(":::")
+        assert result == "video"
+
+    def test_sanitize_dots_only_returns_default(self) -> None:
+        result = _sanitize_filename("...")
+        assert result == "video"
+
+
+@pytest.mark.unit
+class TestBuildDownloadFilename:
+    def test_empty_title_falls_back_to_video(self) -> None:
+        job = _make_job(title="", source_lang="en", target_lang="en")
+        result = _build_download_filename(job, FileType.SRT)
+        assert result == "video (original).srt"
+
+    def test_same_lang_produces_original_suffix(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="en")
+        result = _build_download_filename(job, FileType.SRT)
+        assert result == "My Video (original).srt"
+
+    def test_translation_produces_lang_suffix(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.SRT)
+        assert result == "My Video (en_to_zh-TW).srt"
+
+    def test_title_with_illegal_chars_stripped(self) -> None:
+        job = _make_job(
+            title='My: <video> / test"', source_lang="en", target_lang="zh-TW"
+        )
+        result = _build_download_filename(job, FileType.SRT)
+        assert result == "My video  test (en_to_zh-TW).srt"
+
+    def test_source_video_always_original(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.SOURCE_VIDEO)
+        assert result == "My Video (original).mp4"
+
+    def test_audio_always_original(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.AUDIO)
+        assert result == "My Video (original).mp3"
+
+    def test_ass_with_translation(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.ASS)
+        assert result == "My Video (en_to_zh-TW).ass"
+
+    def test_burned_video_with_translation(self) -> None:
+        job = _make_job(title="My Video", source_lang="en", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.VIDEO)
+        assert result == "My Video (en_to_zh-TW).mp4"
+
+    def test_empty_source_lang_produces_original(self) -> None:
+        job = _make_job(title="My Video", source_lang="", target_lang="zh-TW")
+        result = _build_download_filename(job, FileType.SRT)
+        assert result == "My Video (original).srt"

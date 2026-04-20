@@ -36,6 +36,6 @@ And this is the third one.
 
 
 @pytest.fixture
-def sample_youtube_url() -> str:
-    """Return a sample YouTube URL for testing."""
+def sample_source_url() -> str:
+    """Return a sample video URL for testing."""
     return "https://www.youtube.com/watch?v=dQw4w9WgXcQ"

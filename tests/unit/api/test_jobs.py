@@ -13,7 +13,7 @@ class TestJob:
     def test_default_values(self) -> None:
         job = Job(
             id="test1",
-            youtube_url="https://youtube.com/watch?v=test",
+            source_url="https://youtube.com/watch?v=test",
             source_lang="en",
             target_lang="zh-TW",
         )
@@ -29,13 +29,13 @@ class TestJobManager:
     def test_create_job(self) -> None:
         manager = JobManager()
         job = manager.create_job(
-            youtube_url="https://youtube.com/watch?v=test",
+            source_url="https://youtube.com/watch?v=test",
             source_lang="en",
             target_lang="zh-TW",
         )
         assert job.id is not None
         assert len(job.id) == 12
-        assert job.youtube_url == "https://youtube.com/watch?v=test"
+        assert job.source_url == "https://youtube.com/watch?v=test"
         assert job.source_lang == "en"
         assert job.target_lang == "zh-TW"
 

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import structlog
 from fastapi import APIRouter, Form, Request, UploadFile
@@ -53,6 +54,52 @@ _ALLOWED_UPLOAD_EXTENSIONS = {
     ".webm",
 }
 
+_DEFAULT_FILENAME = "video"
+_SUFFIX_ORIGINAL = "(original)"
+_LANG_SEPARATOR = "_to_"
+
+
+class _FileMeta(NamedTuple):
+    ext: str
+    media_type: str
+
+
+_FILE_META: dict[FileType, _FileMeta] = {
+    FileType.SRT: _FileMeta("srt", "text/plain"),
+    FileType.ASS: _FileMeta("ass", "text/plain"),
+    FileType.VIDEO: _FileMeta("mp4", "video/mp4"),
+    FileType.AUDIO: _FileMeta("mp3", "audio/mpeg"),
+    FileType.SOURCE_VIDEO: _FileMeta("mp4", "video/mp4"),
+}
+
+# Windows-reserved + POSIX control characters (NTFS/FAT32/ext4 safe)
+_FILENAME_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+_MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
+
+
+def _sanitize_filename(name: str) -> str:
+    """Remove filesystem-unsafe characters and truncate to 120 chars."""
+    cleaned = _FILENAME_BAD_CHARS.sub("", name).strip(" .")
+    truncated = (cleaned or _DEFAULT_FILENAME)[:120]
+    return truncated.rstrip(" .") or _DEFAULT_FILENAME
+
+
+def _build_download_filename(job: Job, file_type: FileType) -> str:
+    """Build a human-readable download filename for the given job and file type."""
+    base = _sanitize_filename(job.video_title or _DEFAULT_FILENAME)
+    original_only = file_type in (FileType.SOURCE_VIDEO, FileType.AUDIO)
+    same_lang = (
+        not job.source_lang or not job.target_lang or job.source_lang == job.target_lang
+    )
+    suffix = (
+        _SUFFIX_ORIGINAL
+        if original_only or same_lang
+        else f"({job.source_lang}{_LANG_SEPARATOR}{job.target_lang})"
+    )
+    ext = _FILE_META[file_type].ext
+    return f"{base} {suffix}.{ext}"
+
 
 def _get_job_manager(request: Request) -> JobManager:
     """Get the JobManager from app state."""
@@ -83,7 +130,7 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
     """Create a new subtitle generation job."""
     manager = _get_job_manager(request)
     job = manager.create_job(
-        youtube_url=str(body.youtube_url),
+        source_url=str(body.source_url),
         source_lang=body.source_lang,
         target_lang=body.target_lang,
         start_time=body.start_time,
@@ -104,7 +151,6 @@ async def create_job_from_upload(
     request: Request,
 ) -> JobCreateResponse:
     """Create a subtitle generation job from an uploaded file."""
-    # Validate file extension
     filename = file.filename or ""
     suffix = Path(filename).suffix.lower()
     if suffix not in _ALLOWED_UPLOAD_EXTENSIONS:
@@ -113,11 +159,9 @@ async def create_job_from_upload(
             detail=f"Allowed: {', '.join(sorted(_ALLOWED_UPLOAD_EXTENSIONS))}",
         )
 
-    # Sanitize filename to prevent path traversal
     safe_name = Path(filename).name or f"upload{suffix}"
 
-    # Save uploaded file to temp directory with size limit
-    max_size = 500 * 1024 * 1024  # 500 MB
+    max_size = _MAX_UPLOAD_BYTES
     tmp_dir = Path(tempfile.mkdtemp(prefix="bilingualsub_upload_"))
     saved_path = tmp_dir / safe_name
     bytes_written = 0
@@ -212,25 +256,10 @@ async def download_file(job_id: str, file_type: str, request: Request) -> FileRe
             detail="Job may not have completed this step",
         )
 
-    # Set appropriate media type and filename
-    media_types = {
-        FileType.SRT: "text/plain",
-        FileType.ASS: "text/plain",
-        FileType.VIDEO: "video/mp4",
-        FileType.AUDIO: "audio/mpeg",
-        FileType.SOURCE_VIDEO: "video/mp4",
-    }
-    extensions = {
-        FileType.SRT: "srt",
-        FileType.ASS: "ass",
-        FileType.VIDEO: "mp4",
-        FileType.AUDIO: "mp3",
-        FileType.SOURCE_VIDEO: "mp4",
-    }
     return FileResponse(
         path=path,
-        media_type=media_types[ft],
-        filename=f"bilingualsub.{extensions[ft]}",
+        media_type=_FILE_META[ft].media_type,
+        filename=_build_download_filename(job, ft),
     )
 
 

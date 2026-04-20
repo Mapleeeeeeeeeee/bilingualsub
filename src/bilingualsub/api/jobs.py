@@ -29,7 +29,7 @@ class Job:
     """Represents a subtitle generation job."""
 
     id: str
-    youtube_url: str = ""
+    source_url: str = ""
     source_lang: str = ""
     target_lang: str = ""
     local_video_path: Path | None = None
@@ -59,7 +59,7 @@ class JobManager:
 
     def create_job(
         self,
-        youtube_url: str = "",
+        source_url: str = "",
         source_lang: str = "",
         target_lang: str = "",
         start_time: float | None = None,
@@ -70,7 +70,7 @@ class JobManager:
         job_id = uuid.uuid4().hex[:12]
         job = Job(
             id=job_id,
-            youtube_url=youtube_url,
+            source_url=source_url,
             source_lang=source_lang,
             target_lang=target_lang,
             local_video_path=local_video_path,
@@ -78,7 +78,7 @@ class JobManager:
             end_time=end_time,
         )
         self._jobs[job_id] = job
-        logger.info("job_created", job_id=job_id, youtube_url=youtube_url)
+        logger.info("job_created", job_id=job_id, source_url=source_url)
         return job
 
     def get_job(self, job_id: str) -> Job | None:

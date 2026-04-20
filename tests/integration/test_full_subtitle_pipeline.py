@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from bilingualsub.core.downloader import VideoMetadata, download_youtube_video
+from bilingualsub.core.downloader import VideoMetadata, download_video
 from bilingualsub.core.merger import merge_subtitles
 from bilingualsub.core.subtitle import Subtitle
 from bilingualsub.core.transcriber import transcribe_audio
@@ -123,7 +123,7 @@ class TestFullSubtitlePipeline:
 
         dl_patches = _patch_downloader(video_path)
         with dl_patches[0], dl_patches[1], dl_patches[2]:
-            metadata = download_youtube_video(YOUTUBE_URL, video_path)
+            metadata = download_video(YOUTUBE_URL, video_path)
 
         assert isinstance(metadata, VideoMetadata)
 
@@ -176,7 +176,7 @@ class TestFullSubtitlePipeline:
 
         dl_patches = _patch_downloader(video_path)
         with dl_patches[0], dl_patches[1], dl_patches[2]:
-            metadata = download_youtube_video(YOUTUBE_URL, video_path)
+            metadata = download_video(YOUTUBE_URL, video_path)
 
         audio_path = tmp_path / "audio.mp3"
         audio_path.write_bytes(b"fake audio content")
@@ -216,13 +216,13 @@ class TestFullSubtitlePipeline:
         # Verify dialogue line format
         assert "Dialogue: 0," in written
 
-    def test_pipeline_metadata_flows_from_downloader_to_ass_serializer(
+    def test_ass_output_uses_fixed_playres_regardless_of_video_resolution(
         self,
         tmp_path: Path,
         set_fake_api_key: None,
         sample_whisper_api_response,
     ) -> None:
-        """VideoMetadata width/height flows correctly to ASS PlayResX/PlayResY across resolutions."""
+        """PlayRes is fixed at 1920x1080 for consistent rendering, regardless of input resolution."""
         resolutions = [
             (1920, 1080, "1080p"),
             (1280, 720, "720p"),
@@ -235,7 +235,7 @@ class TestFullSubtitlePipeline:
 
             dl_patches = _patch_downloader(video_path, width=width, height=height)
             with dl_patches[0], dl_patches[1], dl_patches[2]:
-                metadata = download_youtube_video(YOUTUBE_URL, video_path)
+                metadata = download_video(YOUTUBE_URL, video_path)
 
             assert metadata.width == width, f"{label}: width mismatch"
             assert metadata.height == height, f"{label}: height mismatch"
