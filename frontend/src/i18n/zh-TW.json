@@ -54,7 +54,8 @@
     "failed": "處理失敗",
     "subtitleSource": "字幕來源",
     "subtitleSourceYoutube": "YouTube（手動上傳）",
-    "subtitleSourceWhisper": "Whisper 語音辨識"
+    "subtitleSourceWhisper": "Whisper 語音辨識",
+    "nonYoutubeHint": "非 YouTube 平台的影片下載可能較慢"
   },
   "download": {
     "title": "下載結果",

@@ -66,6 +66,11 @@ function App() {
               currentStep={state.currentStep}
               subtitleSource={state.subtitleSource ?? undefined}
             />
+            {state.sourceUrl &&
+              !state.sourceUrl.includes('youtube.com') &&
+              !state.sourceUrl.includes('youtu.be') && (
+                <p className="text-xs text-gray-400 text-center">{t('progress.nonYoutubeHint')}</p>
+              )}
           </div>
         )}
 
