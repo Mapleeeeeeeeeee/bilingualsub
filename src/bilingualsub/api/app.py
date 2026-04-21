@@ -19,6 +19,8 @@ from bilingualsub.api.errors import ApiError
 from bilingualsub.api.jobs import JobManager
 from bilingualsub.api.logging import setup_logging
 from bilingualsub.api.routes import router
+from bilingualsub.core.glossary import GlossaryManager
+from bilingualsub.utils.config import get_settings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -30,6 +32,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_logging()
     manager = JobManager()
     app.state.job_manager = manager
+    settings = get_settings()
+    app.state.glossary_manager = GlossaryManager(Path(settings.glossary_path))
     await manager.start_cleanup_loop()
     yield
     await manager.stop_cleanup_loop()

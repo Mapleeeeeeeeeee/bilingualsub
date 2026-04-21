@@ -122,3 +122,18 @@ class SSEProgressData(BaseModel):
     progress: float
     current_step: str | None = None
     message: str | None = None
+    subtitle_source: str | None = None
+
+
+class GlossaryEntrySchema(BaseModel):
+    source: str
+    target: str
+
+
+class GlossaryAddRequest(BaseModel):
+    source: str
+    target: str
+
+
+class GlossaryListResponse(BaseModel):
+    entries: list[GlossaryEntrySchema]

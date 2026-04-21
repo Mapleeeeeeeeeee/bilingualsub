@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from bilingualsub.api.constants import FileType, JobStatus, SSEEvent
+from bilingualsub.api.constants import FileType, JobStatus, SSEEvent, SubtitleSource
 from bilingualsub.api.errors import PipelineError
 
 if TYPE_CHECKING:
@@ -28,6 +28,7 @@ from bilingualsub.core import (
     transcribe_audio,
     translate_subtitle,
 )
+from bilingualsub.core.subtitle_fetcher import fetch_manual_subtitle
 from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
 from bilingualsub.utils import (
     FFmpegError,
@@ -55,20 +56,24 @@ def _send_progress(
     progress: float,
     current_step: str,
     message: str,
+    extra: dict[str, object] | None = None,
 ) -> None:
     """Update job state and enqueue an SSE progress event."""
     job.status = status
     job.progress = progress
     job.current_step = current_step
+    data: dict[str, object] = {
+        "status": str(status),
+        "progress": progress,
+        "current_step": current_step,
+        "message": message,
+    }
+    if extra:
+        data.update(extra)
     job.event_queue.put_nowait(
         {
             "event": SSEEvent.PROGRESS,
-            "data": {
-                "status": str(status),
-                "progress": progress,
-                "current_step": current_step,
-                "message": message,
-            },
+            "data": data,
         }
     )
 
@@ -270,7 +275,6 @@ async def run_download(job: Job) -> None:
 
     try:
         video_path, metadata = await _acquire_video(job, work_dir, log)
-        # Trimming is now handled during download via start_time/end_time
         await _extract_audio_step(job, video_path, work_dir, log)
 
         # Save metadata for subtitle phase
@@ -294,6 +298,40 @@ async def run_download(job: Job) -> None:
         )
 
 
+async def _merge_and_serialize(
+    job: Job,
+    original_sub: Subtitle,
+    translated_sub: Subtitle,
+    work_dir: Path,
+    log: structlog.stdlib.BoundLogger,
+) -> None:
+    """Merge original + translated subtitles and serialize to SRT/ASS."""
+    _send_progress(job, JobStatus.MERGING, 70.0, "merge", "Merging bilingual subtitles")
+    t0 = time.monotonic()
+
+    merged_entries = await asyncio.to_thread(
+        merge_subtitles, original_sub.entries, translated_sub.entries
+    )
+    merged_sub = Subtitle(entries=merged_entries)
+
+    srt_content = serialize_srt(merged_sub)
+    srt_path = work_dir / "subtitle.srt"
+    srt_path.write_text(srt_content, encoding="utf-8")
+    job.output_files[FileType.SRT] = srt_path
+
+    ass_content = serialize_bilingual_ass(
+        original_sub,
+        translated_sub,
+        video_width=job.video_width,
+        video_height=job.video_height,
+    )
+    ass_path = work_dir / "subtitle.ass"
+    ass_path.write_text(ass_content, encoding="utf-8")
+    job.output_files[FileType.ASS] = ass_path
+
+    log.info("step_done", step="merge", duration_ms=int((time.monotonic() - t0) * 1000))
+
+
 async def run_subtitle(job: Job) -> None:
     """Phase 2: Transcribe -> Translate -> Merge -> Serialize."""
     log = logger.bind(job_id=job.id)
@@ -302,23 +340,56 @@ async def run_subtitle(job: Job) -> None:
         audio_path = job.output_files[FileType.AUDIO]
         work_dir = audio_path.parent
 
-        # --- Step: Transcribe ---
-        _send_progress(
-            job, JobStatus.TRANSCRIBING, 20.0, "transcribe", "Transcribing audio"
-        )
-        t0 = time.monotonic()
-        original_sub = await asyncio.to_thread(
-            transcribe_audio, audio_path, language=job.source_lang
-        )
-        log.info(
-            "step_done",
-            step="transcribe",
-            duration_ms=int((time.monotonic() - t0) * 1000),
-        )
+        original_sub = None
+        subtitle_source = SubtitleSource.WHISPER
 
-        # --- Step: Translate ---
+        if job.source_url:
+            _send_progress(
+                job,
+                JobStatus.TRANSCRIBING,
+                20.0,
+                "transcribe",
+                "Checking for manual subtitles",
+            )
+            t0 = time.monotonic()
+            original_sub = await asyncio.to_thread(
+                fetch_manual_subtitle, job.source_url, job.source_lang, work_dir
+            )
+            if original_sub is not None:
+                subtitle_source = SubtitleSource.YOUTUBE_MANUAL
+                log.info(
+                    "step_done",
+                    step="subtitle_fetch",
+                    source="youtube_manual",
+                    entries=len(original_sub.entries),
+                    duration_ms=int((time.monotonic() - t0) * 1000),
+                )
+
+        if original_sub is None:
+            _send_progress(
+                job, JobStatus.TRANSCRIBING, 20.0, "transcribe", "Transcribing audio"
+            )
+            t0 = time.monotonic()
+            original_sub = await asyncio.to_thread(
+                transcribe_audio, audio_path, language=job.source_lang
+            )
+            log.info(
+                "step_done",
+                step="transcribe",
+                duration_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        job.subtitle_source = subtitle_source
+        if not isinstance(original_sub, Subtitle):
+            raise PipelineError("transcription_failed", "Failed to obtain subtitles")
+
         _send_progress(
-            job, JobStatus.TRANSLATING, 50.0, "translate", "Translating subtitles"
+            job,
+            JobStatus.TRANSLATING,
+            50.0,
+            "translate",
+            "Translating subtitles",
+            extra={"subtitle_source": str(subtitle_source)},
         )
         t0 = time.monotonic()
         _on_translate_progress = _make_translate_progress_cb(job)
@@ -330,6 +401,7 @@ async def run_subtitle(job: Job) -> None:
             target_lang=job.target_lang,
             video_title=job.video_title,
             video_description=job.video_description,
+            glossary_text=job.glossary_text,
             on_progress=_on_translate_progress,
             on_rate_limit=_on_rate_limit,
         )
@@ -339,40 +411,13 @@ async def run_subtitle(job: Job) -> None:
             duration_ms=int((time.monotonic() - t0) * 1000),
         )
 
-        # --- Step: Merge & Serialize ---
-        _send_progress(
-            job, JobStatus.MERGING, 70.0, "merge", "Merging bilingual subtitles"
-        )
-        t0 = time.monotonic()
-
-        merged_entries = await asyncio.to_thread(
-            merge_subtitles, original_sub.entries, translated_sub.entries
-        )
-        merged_sub = Subtitle(entries=merged_entries)
-
-        srt_content = serialize_srt(merged_sub)
-        srt_path = work_dir / "subtitle.srt"
-        srt_path.write_text(srt_content, encoding="utf-8")
-        job.output_files[FileType.SRT] = srt_path
-
-        ass_content = serialize_bilingual_ass(
-            original_sub,
-            translated_sub,
-            video_width=job.video_width,
-            video_height=job.video_height,
-        )
-        ass_path = work_dir / "subtitle.ass"
-        ass_path.write_text(ass_content, encoding="utf-8")
-        job.output_files[FileType.ASS] = ass_path
-
-        log.info(
-            "step_done", step="merge", duration_ms=int((time.monotonic() - t0) * 1000)
-        )
+        await _merge_and_serialize(job, original_sub, translated_sub, work_dir, log)
 
         _send_complete(job)
         log.info("subtitle_complete", job_id=job.id)
-    except PipelineError:
-        raise
+    except PipelineError as exc:
+        _send_error(job, exc.code, exc.message, exc.detail or "")
+        log.error("subtitle_failed", error_code=exc.code, error=str(exc))
     except Exception as exc:
         pipeline_err = _to_pipeline_error(exc)
         _send_error(

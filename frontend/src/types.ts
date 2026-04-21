@@ -32,6 +32,7 @@ export interface SSEProgressData {
   progress: number;
   current_step: string | null;
   message: string | null;
+  subtitle_source?: string;
 }
 
 export interface SSEHandlers {
@@ -76,4 +77,13 @@ export interface SrtEntry {
   endTime: string;
   translated: string; // first line: editable
   original: string; // second line: read-only
+}
+
+export interface GlossaryEntry {
+  source: string;
+  target: string;
+}
+
+export interface GlossaryListResponse {
+  entries: GlossaryEntry[];
 }

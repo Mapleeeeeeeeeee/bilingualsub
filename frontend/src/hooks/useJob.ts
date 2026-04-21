@@ -16,15 +16,17 @@ interface JobState {
     | 'burned'
     | 'failed';
   jobId: string | null;
+  sourceUrl: string | null;
   status: JobStatus | null;
   progress: number;
   currentStep: string | null;
+  subtitleSource: string | null;
   error: { code: string; message: string; detail?: string } | null;
 }
 
 // Action types
 type JobAction =
-  | { type: 'SUBMIT' }
+  | { type: 'SUBMIT'; sourceUrl: string | null }
   | { type: 'JOB_CREATED'; jobId: string }
   | { type: 'PROGRESS'; data: SSEProgressData }
   | { type: 'DOWNLOAD_COMPLETE' }
@@ -41,16 +43,18 @@ type JobAction =
 const initialState: JobState = {
   phase: 'idle',
   jobId: null,
+  sourceUrl: null,
   status: null,
   progress: 0,
   currentStep: null,
+  subtitleSource: null,
   error: null,
 };
 
 function jobReducer(state: JobState, action: JobAction): JobState {
   switch (action.type) {
     case 'SUBMIT':
-      return { ...initialState, phase: 'submitting' };
+      return { ...initialState, phase: 'submitting', sourceUrl: action.sourceUrl };
     case 'JOB_CREATED':
       return { ...state, phase: 'processing', jobId: action.jobId };
     case 'PROGRESS':
@@ -59,6 +63,7 @@ function jobReducer(state: JobState, action: JobAction): JobState {
         status: action.data.status,
         progress: action.data.progress,
         currentStep: action.data.current_step,
+        subtitleSource: action.data.subtitle_source ?? state.subtitleSource,
       };
     case 'DOWNLOAD_COMPLETE':
       return {
@@ -124,7 +129,8 @@ export function useJob() {
   const submitJob = useCallback(
     async (request: JobCreateRequest | JobUploadRequest) => {
       cleanup();
-      dispatch({ type: 'SUBMIT' });
+      const sourceUrl = 'source_url' in request ? request.source_url : null;
+      dispatch({ type: 'SUBMIT', sourceUrl });
 
       try {
         const response =

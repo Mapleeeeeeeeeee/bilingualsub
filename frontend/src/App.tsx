@@ -64,7 +64,13 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
             />
+            {state.sourceUrl &&
+              !state.sourceUrl.includes('youtube.com') &&
+              !state.sourceUrl.includes('youtu.be') && (
+                <p className="text-xs text-gray-400 text-center">{t('progress.nonYoutubeHint')}</p>
+              )}
           </div>
         )}
 
@@ -156,6 +162,7 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
               steps={SUBTITLE_STEPS}
             />
           </div>
@@ -225,6 +232,7 @@ function App() {
               status={state.status}
               progress={state.progress}
               currentStep={state.currentStep}
+              subtitleSource={state.subtitleSource ?? undefined}
             />
           </div>
         )}

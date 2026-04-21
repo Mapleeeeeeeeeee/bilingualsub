@@ -93,6 +93,7 @@ def _build_translator_description(
     target_lang: str,
     video_title: str,
     video_description: str,
+    glossary_text: str = "",
 ) -> str:
     """Build agent system prompt description."""
     base = (
@@ -103,13 +104,16 @@ def _build_translator_description(
         "字幕可能在句子中間被截斷，這是正常的，請照樣翻譯，不要提示原文不完整。"  # noqa: RUF001
     )
     metadata_section = _build_metadata_section(video_title, video_description)
-    if not metadata_section:
-        return base
-    return (
-        f"{base}\n\n"
-        "以下是影片背景資訊，請用於理解語境、專有名詞與代稱，但不要逐字照抄："  # noqa: RUF001
-        f"\n{metadata_section}"
-    )
+    result = base
+    if metadata_section:
+        result = (
+            f"{base}\n\n"
+            "以下是影片背景資訊，請用於理解語境、專有名詞與代稱，但不要逐字照抄："  # noqa: RUF001
+            f"\n{metadata_section}"
+        )
+    if glossary_text:
+        result = f"{result}\n\n{glossary_text}"
+    return result
 
 
 def _strip_number_prefix(text: str) -> str:
@@ -302,6 +306,7 @@ def translate_subtitle(
     target_lang: str = "zh-TW",
     video_title: str = "",
     video_description: str = "",
+    glossary_text: str = "",
     on_progress: Callable[[int, int], None] | None = None,
     on_rate_limit: Callable[[float, int, int], None] | None = None,
 ) -> Subtitle:
@@ -337,6 +342,7 @@ def translate_subtitle(
             target_lang=target_lang,
             video_title=video_title,
             video_description=video_description,
+            glossary_text=glossary_text,
         ),
     )
 
@@ -451,6 +457,7 @@ def retranslate_entries(
     target_lang: str = "zh-TW",
     video_title: str = "",
     video_description: str = "",
+    glossary_text: str = "",
     user_context: str | None = None,
 ) -> dict[int, str]:
     """Re-translate selected subtitle entries with local context.
@@ -492,6 +499,7 @@ def retranslate_entries(
             target_lang=target_lang,
             video_title=video_title,
             video_description=video_description,
+            glossary_text=glossary_text,
         ),
     )
 

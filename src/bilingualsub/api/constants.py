@@ -37,6 +37,13 @@ class SSEEvent(StrEnum):
     PING = "ping"
 
 
+class SubtitleSource(StrEnum):
+    """Source of the original subtitle track."""
+
+    WHISPER = "whisper"
+    YOUTUBE_MANUAL = "youtube_manual"
+
+
 JOB_TTL_SECONDS = 1800
 CLEANUP_INTERVAL_SECONDS = 300
 SSE_KEEPALIVE_SECONDS = 30

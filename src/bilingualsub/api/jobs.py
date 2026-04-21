@@ -45,6 +45,8 @@ class Job:
     video_height: int = 0
     video_title: str = ""
     video_description: str = ""
+    glossary_text: str = ""
+    subtitle_source: str = ""
     output_files: dict[FileType, Path] = field(default_factory=dict)
     event_queue: asyncio.Queue[dict[str, object]] = field(default_factory=asyncio.Queue)
     created_at: float = field(default_factory=time.monotonic)

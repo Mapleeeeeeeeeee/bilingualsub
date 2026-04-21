@@ -20,11 +20,19 @@ from bilingualsub.api.constants import (
     JobStatus,
     SSEEvent,
 )
-from bilingualsub.api.errors import InvalidRequestError, JobNotFoundError, PipelineError
+from bilingualsub.api.errors import (
+    ApiError,
+    InvalidRequestError,
+    JobNotFoundError,
+    PipelineError,
+)
 from bilingualsub.api.pipeline import run_burn, run_download, run_subtitle
 from bilingualsub.api.schemas import (
     BurnRequest,
     ErrorDetail,
+    GlossaryAddRequest,
+    GlossaryEntrySchema,
+    GlossaryListResponse,
     JobCreateRequest,
     JobCreateResponse,
     JobStatusResponse,
@@ -34,6 +42,7 @@ from bilingualsub.api.schemas import (
     StartSubtitleRequest,
 )
 from bilingualsub.core import RetranslateEntry, TranslationError, retranslate_entries
+from bilingualsub.core.glossary import GlossaryError, GlossaryManager
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -113,6 +122,12 @@ def _get_job_or_404(request: Request, job_id: str) -> Job:
     if job is None:
         raise JobNotFoundError(job_id)
     return job
+
+
+def _get_glossary_manager(request: Request) -> GlossaryManager:
+    """Get the GlossaryManager from app state."""
+    manager: GlossaryManager = request.app.state.glossary_manager
+    return manager
 
 
 def _start_background_task(request: Request, coro: Any) -> None:
@@ -281,6 +296,8 @@ async def start_subtitle(
             job.source_lang = body.source_lang
         if body.target_lang:
             job.target_lang = body.target_lang
+    glossary_manager = _get_glossary_manager(request)
+    job.glossary_text = glossary_manager.format_for_prompt()
     _start_background_task(request, run_subtitle(job))
     return {"status": "subtitle_started"}
 
@@ -312,6 +329,7 @@ async def partial_retranslate(
     if FileType.SOURCE_VIDEO not in job.output_files:
         raise InvalidRequestError("Pipeline not complete")
 
+    glossary_manager = _get_glossary_manager(request)
     try:
         results = await asyncio.to_thread(
             retranslate_entries,
@@ -328,6 +346,7 @@ async def partial_retranslate(
             target_lang=job.target_lang,
             video_title=job.video_title,
             video_description=job.video_description,
+            glossary_text=glossary_manager.format_for_prompt(),
             user_context=body.user_context,
         )
     except ValueError as exc:
@@ -348,6 +367,57 @@ async def partial_retranslate(
             for index, translated in sorted(results.items())
         ]
     )
+
+
+@router.get("/glossary", response_model=GlossaryListResponse)
+async def list_glossary(request: Request) -> GlossaryListResponse:
+    manager = _get_glossary_manager(request)
+    entries = manager.get_all()
+    return GlossaryListResponse(
+        entries=[GlossaryEntrySchema(source=e.source, target=e.target) for e in entries]
+    )
+
+
+@router.post("/glossary", response_model=GlossaryEntrySchema, status_code=201)
+async def add_glossary_entry(
+    body: GlossaryAddRequest, request: Request
+) -> GlossaryEntrySchema:
+    manager = _get_glossary_manager(request)
+    try:
+        entry = manager.add(body.source, body.target)
+    except GlossaryError as exc:
+        raise ApiError(
+            status_code=400, code="GLOSSARY_ERROR", message=str(exc)
+        ) from exc
+    return GlossaryEntrySchema(source=entry.source, target=entry.target)
+
+
+@router.put("/glossary/{source}", response_model=GlossaryEntrySchema)
+async def update_glossary_entry(
+    source: str, body: GlossaryAddRequest, request: Request
+) -> GlossaryEntrySchema:
+    manager = _get_glossary_manager(request)
+    try:
+        entry = manager.update(source, body.target)
+    except GlossaryError as exc:
+        is_not_found = "not found" in str(exc).lower()
+        raise ApiError(
+            status_code=404 if is_not_found else 400,
+            code="GLOSSARY_NOT_FOUND" if is_not_found else "GLOSSARY_ERROR",
+            message=str(exc),
+        ) from exc
+    return GlossaryEntrySchema(source=entry.source, target=entry.target)
+
+
+@router.delete("/glossary/{source}", status_code=204)
+async def delete_glossary_entry(source: str, request: Request) -> None:
+    manager = _get_glossary_manager(request)
+    try:
+        manager.delete(source)
+    except GlossaryError as exc:
+        raise ApiError(
+            status_code=404, code="GLOSSARY_NOT_FOUND", message=str(exc)
+        ) from exc
 
 
 @router.get("/health")
