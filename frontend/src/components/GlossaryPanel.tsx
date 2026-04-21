@@ -44,7 +44,8 @@ export function GlossaryPanel() {
       setNewTarget('');
       setIsAdding(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add term');
+      const message = err instanceof Error ? err.message : '';
+      setError(message.includes('full') ? t('glossary.full') : message || 'Failed to add term');
     }
   };
 

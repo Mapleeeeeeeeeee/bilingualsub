@@ -583,9 +583,27 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
 
               {/* Original text (read-only) */}
               {entry.original && (
-                <p className="text-sm text-gray-400 font-sans leading-relaxed mt-1">
-                  {entry.original}
-                </p>
+                <div className="flex items-start gap-2 mt-1">
+                  <p className="text-sm text-gray-400 font-sans leading-relaxed flex-1">
+                    {entry.original}
+                  </p>
+                  <button
+                    onClick={async e => {
+                      e.stopPropagation();
+                      try {
+                        await apiClient.addGlossaryEntry(entry.original, entry.original);
+                        setIsGlossaryOpen(true);
+                      } catch {
+                        // Term may already exist, just open panel
+                        setIsGlossaryOpen(true);
+                      }
+                    }}
+                    className="shrink-0 p-1 text-gray-300 hover:text-black transition-colors opacity-0 group-hover:opacity-100"
+                    title={t('glossary.addToGlossary')}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               )}
             </div>
           ))}
