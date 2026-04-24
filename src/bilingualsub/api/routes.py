@@ -150,6 +150,7 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
         target_lang=body.target_lang,
         start_time=body.start_time,
         end_time=body.end_time,
+        processing_mode=body.processing_mode,
     )
     _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)
@@ -296,6 +297,8 @@ async def start_subtitle(
             job.source_lang = body.source_lang
         if body.target_lang:
             job.target_lang = body.target_lang
+        if body.processing_mode is not None:
+            job.processing_mode = body.processing_mode
     glossary_manager = _get_glossary_manager(request)
     job.glossary_text = glossary_manager.format_for_prompt()
     _start_background_task(request, run_subtitle(job))

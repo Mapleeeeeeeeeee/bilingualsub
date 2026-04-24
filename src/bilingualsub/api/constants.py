@@ -42,6 +42,7 @@ class SubtitleSource(StrEnum):
 
     WHISPER = "whisper"
     YOUTUBE_MANUAL = "youtube_manual"
+    VISUAL_DESCRIPTION = "visual_description"
 
 
 JOB_TTL_SECONDS = 1800

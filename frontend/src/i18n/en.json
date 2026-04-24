@@ -35,7 +35,11 @@
     "inputModeUrl": "Video URL",
     "inputModeFile": "Upload File",
     "filePlaceholder": "Choose a video or audio file",
-    "fileSelected": "Selected: {{filename}}"
+    "fileSelected": "Selected: {{filename}}",
+    "processingModeLabel": "Processing Mode",
+    "processingModeSubtitle": "Speech Subtitles",
+    "processingModeVisual": "Visual Description",
+    "processingModeVisualHint": "Analyze visual content for subtitles (for videos without speech)"
   },
   "lang": {
     "en": "English",
@@ -55,7 +59,8 @@
     "subtitleSource": "Source",
     "subtitleSourceYoutube": "YouTube (manual)",
     "subtitleSourceWhisper": "Whisper",
-    "nonYoutubeHint": "Non-YouTube platforms may take longer to download"
+    "nonYoutubeHint": "Non-YouTube platforms may take longer to download",
+    "describing": "Analyzing visual content..."
   },
   "download": {
     "title": "Download Results",
@@ -78,7 +83,9 @@
     "network_error": "Network connection error",
     "unknown_error": "An unknown error occurred",
     "invalidTimeFormat": "Invalid time format",
-    "invalidTimeRange": "End time must be greater than start time"
+    "invalidTimeRange": "End time must be greater than start time",
+    "visual_description_failed": "Visual analysis failed",
+    "video_too_long": "Video exceeds 90-minute limit for visual description mode"
   },
   "language_switcher": {
     "label": "Language"

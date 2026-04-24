@@ -6,6 +6,7 @@ export interface JobCreateRequest {
   target_lang?: string;
   start_time?: number; // seconds
   end_time?: number; // seconds
+  processing_mode?: 'subtitle' | 'visual_description';
 }
 
 export interface JobCreateResponse {
@@ -48,6 +49,7 @@ export interface JobUploadRequest {
   target_lang?: string;
   start_time?: number;
   end_time?: number;
+  processing_mode?: 'subtitle' | 'visual_description';
 }
 
 export interface RetranslateEntryPayload {

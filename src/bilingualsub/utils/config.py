@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     translator_model: str = "groq:openai/gpt-oss-120b"
     glossary_path: str = "glossary.json"
+    gemini_api_key: str = ""
+    visual_description_model: str = "gemini-3.1-flash-lite-preview"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -80,3 +82,21 @@ def get_openai_api_key() -> str:
             "Please set it with your OpenAI API key."
         )
     return settings.openai_api_key
+
+
+def get_gemini_api_key() -> str:
+    """Get Gemini API key from environment.
+
+    Returns:
+        Gemini API key string
+
+    Raises:
+        ValueError: If GEMINI_API_KEY is not set or empty
+    """
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        raise ValueError(
+            "GEMINI_API_KEY environment variable is not set. "
+            "Please set it with your Gemini API key."
+        )
+    return settings.gemini_api_key

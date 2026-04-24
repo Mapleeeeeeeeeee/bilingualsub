@@ -1,6 +1,6 @@
 """Pydantic v2 request/response schemas."""
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 
@@ -17,6 +17,7 @@ class JobCreateRequest(BaseModel):
     target_lang: str = "zh-TW"
     start_time: float | None = None
     end_time: float | None = None
+    processing_mode: Literal["subtitle", "visual_description"] = "subtitle"
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
@@ -71,6 +72,7 @@ class StartSubtitleRequest(BaseModel):
 
     source_lang: str | None = None
     target_lang: str | None = None
+    processing_mode: Literal["subtitle", "visual_description"] | None = None
 
 
 class PartialRetranslateEntry(BaseModel):

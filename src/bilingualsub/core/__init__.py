@@ -16,6 +16,10 @@ from bilingualsub.core.translator import (
     retranslate_entries,
     translate_subtitle,
 )
+from bilingualsub.core.visual_describer import (
+    VisualDescriptionError,
+    describe_video,
+)
 
 __all__ = [
     "DownloadError",
@@ -29,6 +33,8 @@ __all__ = [
     "TranscriptionError",
     "TranslationError",
     "VideoMetadata",
+    "VisualDescriptionError",
+    "describe_video",
     "download_video",
     "fetch_manual_subtitle",
     "merge_subtitles",
