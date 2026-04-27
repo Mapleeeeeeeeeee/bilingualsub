@@ -189,3 +189,95 @@ class TestDescribeVideo:
         assert len(result.entries) == 2
         assert result.entries[0].text == "Valid first entry"
         assert result.entries[1].text == "Valid second entry"
+
+    def test_mixed_timestamp_formats_parsed_correctly(
+        self, tmp_path, mock_genai, mock_get_gemini_api_key
+    ):
+        """MM:SS and HH:MM:SS formats are both parsed correctly."""
+        response_text = (
+            "01:00 - 01:30 | Scene with minutes\n"
+            "01:00:00 - 01:00:10 | Scene with hours\n"
+        )
+        self._setup_client(mock_genai, response_text)
+
+        video_path = tmp_path / "test.mp4"
+        video_path.write_bytes(b"fake video content")
+
+        result = describe_video(video_path, source_lang="en")
+
+        assert len(result.entries) == 2
+        # MM:SS: 01:00 = 60 seconds, 01:30 = 90 seconds
+        assert result.entries[0].start == timedelta(minutes=1, seconds=0)
+        assert result.entries[0].end == timedelta(minutes=1, seconds=30)
+        # HH:MM:SS: 01:00:00 = 1 hour, 01:00:10 = 1 hour 10 seconds
+        assert result.entries[1].start == timedelta(hours=1)
+        assert result.entries[1].end == timedelta(hours=1, seconds=10)
+
+    def test_reversed_and_equal_timestamps_are_skipped(
+        self, tmp_path, mock_genai, mock_get_gemini_api_key
+    ):
+        """Entries where start >= end are silently skipped."""
+        response_text = (
+            "00:10 - 00:05 | Reversed timestamps\n"
+            "00:05 - 00:05 | Equal timestamps\n"
+            "00:00 - 00:10 | Valid entry\n"
+        )
+        self._setup_client(mock_genai, response_text)
+
+        video_path = tmp_path / "test.mp4"
+        video_path.write_bytes(b"fake video content")
+
+        result = describe_video(video_path, source_lang="en")
+
+        assert len(result.entries) == 1
+        assert result.entries[0].text == "Valid entry"
+
+    def test_file_state_failed_raises_error(
+        self, tmp_path, mock_genai, mock_get_gemini_api_key
+    ):
+        """Gemini file in FAILED state raises VisualDescriptionError."""
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+
+        mock_file = MagicMock()
+        mock_file.state = "FAILED"
+        mock_file.name = "files/test-file"
+        mock_client.files.upload.return_value = mock_file
+
+        video_path = tmp_path / "test.mp4"
+        video_path.write_bytes(b"fake video content")
+
+        with pytest.raises(
+            VisualDescriptionError,
+            match="File processing failed on Gemini servers",
+        ):
+            describe_video(video_path, source_lang="en")
+
+    def test_file_processing_timeout_raises_error(
+        self, tmp_path, mock_genai, mock_get_gemini_api_key
+    ):
+        """File stuck in PROCESSING state past timeout raises error."""
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+
+        mock_file = MagicMock()
+        mock_file.state = "PROCESSING"
+        mock_file.name = "files/test-file"
+        mock_client.files.upload.return_value = mock_file
+        # files.get always returns PROCESSING
+        mock_client.files.get.return_value = mock_file
+
+        video_path = tmp_path / "test.mp4"
+        video_path.write_bytes(b"fake video content")
+
+        with (
+            patch("bilingualsub.core.visual_describer.time") as mock_time,
+            pytest.raises(
+                VisualDescriptionError,
+                match="File processing timed out",
+            ),
+        ):
+            # First call to monotonic() sets deadline, second exceeds it
+            mock_time.monotonic.side_effect = [0.0, 601.0]
+            mock_time.sleep = MagicMock()
+            describe_video(video_path, source_lang="en")

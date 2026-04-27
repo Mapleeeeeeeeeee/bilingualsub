@@ -179,6 +179,12 @@ class TestVisualDescriptionPipeline:
                 # Step 5: poll for completion
                 status_data = _poll_until_terminal(client, job_id)
 
+                # Verify describe→translate causal chain
+                mock_describe.assert_called_once()
+                mock_translate.assert_called_once()
+                translate_first_arg = mock_translate.call_args.args[0]
+                assert translate_first_arg.entries[0].text == "Product showcase"
+
             # Step 6: assertions
             assert status_data["status"] == "completed", (
                 f"Expected completed, got {status_data['status']!r}. "

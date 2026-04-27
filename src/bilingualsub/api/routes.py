@@ -164,7 +164,7 @@ async def create_job_from_upload(
     target_lang: str = Form("zh-TW"),
     start_time: float | None = Form(None),
     end_time: float | None = Form(None),
-    processing_mode: str = Form("subtitle"),
+    processing_mode: str = Form(ProcessingMode.SUBTITLE),
     *,
     request: Request,
 ) -> JobCreateResponse:
@@ -195,6 +195,14 @@ async def create_job_from_upload(
                 )
             buf.write(chunk)
 
+    try:
+        mode = ProcessingMode(processing_mode)
+    except ValueError as err:
+        raise InvalidRequestError(
+            "Invalid processing_mode",
+            detail=f"Must be one of: {', '.join(ProcessingMode)}",
+        ) from err
+
     manager = _get_job_manager(request)
     job = manager.create_job(
         source_lang=source_lang,
@@ -202,7 +210,7 @@ async def create_job_from_upload(
         start_time=start_time,
         end_time=end_time,
         local_video_path=saved_path,
-        processing_mode=ProcessingMode(processing_mode),
+        processing_mode=mode,
     )
     _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)

@@ -115,14 +115,6 @@ e2e = [
     { name = "pytest-playwright" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "agno", specifier = ">=1.0.0" },
@@ -157,14 +149,6 @@ requires-dist = [
     { name = "yt-dlp", specifier = ">=2024.0.0" },
 ]
 provides-extras = ["dev", "e2e"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.19.1" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "ruff", specifier = ">=0.14.14" },
-]
 
 [[package]]
 name = "boolean-py"

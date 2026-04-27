@@ -8,16 +8,16 @@ import time
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
-from bilingualsub.utils.config import get_gemini_api_key, get_settings
-
 if TYPE_CHECKING:
     from pathlib import Path
+
+from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
+from bilingualsub.utils.config import get_gemini_api_key, get_settings
 
 try:
     from google import genai as _genai
 except ImportError:
-    _genai = None
+    _genai = None  # type: ignore[assignment]
 
 _FILE_PROCESSING_TIMEOUT = 600
 
@@ -124,7 +124,7 @@ def describe_video(
         raise ValueError(f"Video file not found: {video_path}")
 
     if _genai is None:
-        raise VisualDescriptionError(
+        raise ValueError(
             "google-genai package is not installed. Run: uv add google-genai"
         )
 
@@ -137,6 +137,7 @@ def describe_video(
     else:
         prompt += "\n\nOutput in the video's original language."
 
+    client = None
     uploaded_file = None
     try:
         client = _genai.Client(api_key=api_key)
@@ -152,7 +153,7 @@ def describe_video(
     except Exception as exc:
         raise VisualDescriptionError(f"Gemini API call failed: {exc}") from exc
     finally:
-        if uploaded_file and uploaded_file.name:
+        if client and uploaded_file and uploaded_file.name:
             with contextlib.suppress(Exception):
                 client.files.delete(name=uploaded_file.name)
 

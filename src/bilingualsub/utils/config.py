@@ -48,23 +48,22 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def _require_api_key(attr: str, env_var: str) -> str:
-    value = getattr(get_settings(), attr)
+def _require_api_key(value: str, env_var: str) -> str:
     if not value:
         raise ValueError(
             f"{env_var} environment variable is not set. "
             f"Please set it with your {env_var} key."
         )
-    return str(value)
+    return value
 
 
 def get_groq_api_key() -> str:
-    return _require_api_key("groq_api_key", "GROQ_API_KEY")
+    return _require_api_key(get_settings().groq_api_key, "GROQ_API_KEY")
 
 
 def get_openai_api_key() -> str:
-    return _require_api_key("openai_api_key", "OPENAI_API_KEY")
+    return _require_api_key(get_settings().openai_api_key, "OPENAI_API_KEY")
 
 
 def get_gemini_api_key() -> str:
-    return _require_api_key("gemini_api_key", "GEMINI_API_KEY")
+    return _require_api_key(get_settings().gemini_api_key, "GEMINI_API_KEY")

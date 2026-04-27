@@ -42,7 +42,7 @@ repos:
   # Mypy - Static type checking
   # ===========================================
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.19.1
     hooks:
       - id: mypy
         additional_dependencies:
@@ -53,6 +53,7 @@ repos:
           - fastapi>=0.115.0
           - structlog>=24.0.0
           - sse-starlette>=2.0.0
+          - google-genai>=1.0.0
         args: [--config-file=pyproject.toml]
         pass_filenames: false
         entry: bash -c 'mypy src/'

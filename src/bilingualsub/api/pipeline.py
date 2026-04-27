@@ -287,7 +287,8 @@ async def run_download(job: Job) -> None:
 
     try:
         video_path, metadata = await _acquire_video(job, work_dir, log)
-        await _extract_audio_step(job, video_path, work_dir, log)
+        if job.processing_mode != ProcessingMode.VISUAL_DESCRIPTION:
+            await _extract_audio_step(job, video_path, work_dir, log)
 
         # Save metadata for subtitle phase
         job.video_width = metadata.width
