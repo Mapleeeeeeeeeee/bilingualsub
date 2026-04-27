@@ -19,12 +19,31 @@ except ImportError:
     _genai = None
 
 DESCRIBE_PROMPT = (
-    "Analyze this video and provide a timestamped visual description. "
-    "Format each segment as: MM:SS - MM:SS | Description\n"
-    "Focus on: on-screen text, titles, product names, UI elements, "
-    "and key visual scenes.\n"
-    "Provide descriptions in the video's original language. "
-    "Be concise (one sentence per segment)."
+    "You are a narrator producing subtitles for a silent video.\n\n"
+    "Format each subtitle as: MM:SS - MM:SS | Text\n\n"
+    "<pacing>\n"
+    "Viewers need time to read each subtitle while watching the video.\n"
+    "Keep each segment 3-8 seconds. Combine related actions into one line "
+    "(e.g. a user typing a prompt and pressing Send is one segment, "
+    "not three separate ones).\n"
+    "</pacing>\n\n"
+    "<on_screen_text>\n"
+    "When someone types or a message appears on screen, quote the actual "
+    "text so it can be translated later. A viewer watching a foreign-language "
+    "product demo needs to read what was typed, not be told 'the user typed "
+    "a prompt about a globe.'\n"
+    "</on_screen_text>\n\n"
+    "<ui_actions>\n"
+    "For sequences of clicks, menus, and transitions, summarize the goal "
+    "of the sequence in one line (e.g. 'The user customizes the globe's "
+    "appearance using a settings panel'). Individual button labels like "
+    "'Send' or 'Edit' are not useful as standalone subtitles.\n"
+    "</ui_actions>\n\n"
+    "<skip>\n"
+    "Omit static logo cards and branding screens — they carry no information "
+    "a subtitle can add.\n"
+    "</skip>\n\n"
+    "Output in the video's original language."
 )
 
 _TIMESTAMP_PATTERN = re.compile(
@@ -71,7 +90,8 @@ def describe_video(
         # Wait for file processing to complete
         while uploaded_file.state == "PROCESSING":
             time.sleep(2)
-            uploaded_file = client.files.get(name=uploaded_file.name)
+            file_name = uploaded_file.name or ""
+            uploaded_file = client.files.get(name=file_name)
         if uploaded_file.state != "ACTIVE":
             raise VisualDescriptionError(
                 f"File processing failed with state: {uploaded_file.state}"
