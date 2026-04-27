@@ -38,6 +38,8 @@ class TestDescribeVideo:
         mock_genai.Client.return_value = mock_client
 
         mock_file = MagicMock()
+        mock_file.state = "ACTIVE"
+        mock_file.name = "files/test-file"
         mock_client.files.upload.return_value = mock_file
 
         mock_response = MagicMock()
@@ -127,7 +129,10 @@ class TestDescribeVideo:
         """Exception from generate_content is wrapped into VisualDescriptionError."""
         mock_client = MagicMock()
         mock_genai.Client.return_value = mock_client
-        mock_client.files.upload.return_value = MagicMock()
+        mock_file = MagicMock()
+        mock_file.state = "ACTIVE"
+        mock_file.name = "files/test-file"
+        mock_client.files.upload.return_value = mock_file
         mock_client.models.generate_content.side_effect = Exception("quota exceeded")
 
         video_path = tmp_path / "test.mp4"
@@ -151,7 +156,7 @@ class TestDescribeVideo:
                     "GEMINI_API_KEY environment variable is not set"
                 ),
             ),
-            pytest.raises(ValueError),
+            pytest.raises(ValueError, match="GEMINI_API_KEY"),
         ):
             describe_video(video_path, source_lang="en")
 

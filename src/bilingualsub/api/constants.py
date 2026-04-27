@@ -45,6 +45,13 @@ class SubtitleSource(StrEnum):
     VISUAL_DESCRIPTION = "visual_description"
 
 
+class ProcessingMode(StrEnum):
+    """Processing mode for a subtitle generation job."""
+
+    SUBTITLE = "subtitle"
+    VISUAL_DESCRIPTION = "visual_description"
+
+
 JOB_TTL_SECONDS = 1800
 CLEANUP_INTERVAL_SECONDS = 300
 SSE_KEEPALIVE_SECONDS = 30

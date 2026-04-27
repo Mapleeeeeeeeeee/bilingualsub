@@ -19,6 +19,7 @@ from bilingualsub.api.constants import (
     JOB_TTL_SECONDS,
     FileType,
     JobStatus,
+    ProcessingMode,
 )
 
 logger = structlog.get_logger()
@@ -47,7 +48,7 @@ class Job:
     video_description: str = ""
     glossary_text: str = ""
     subtitle_source: str = ""
-    processing_mode: str = "subtitle"
+    processing_mode: ProcessingMode = ProcessingMode.SUBTITLE
     video_duration: float = 0.0
     output_files: dict[FileType, Path] = field(default_factory=dict)
     event_queue: asyncio.Queue[dict[str, object]] = field(default_factory=asyncio.Queue)
@@ -69,7 +70,7 @@ class JobManager:
         start_time: float | None = None,
         end_time: float | None = None,
         local_video_path: Path | None = None,
-        processing_mode: str = "subtitle",
+        processing_mode: ProcessingMode = ProcessingMode.SUBTITLE,
     ) -> Job:
         """Create a new job and store it."""
         job_id = uuid.uuid4().hex[:12]

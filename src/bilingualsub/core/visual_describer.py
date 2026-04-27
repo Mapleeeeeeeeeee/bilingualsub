@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 import time
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.utils.config import get_gemini_api_key, get_settings
@@ -17,6 +18,8 @@ try:
     from google import genai as _genai
 except ImportError:
     _genai = None
+
+_FILE_PROCESSING_TIMEOUT = 600
 
 DESCRIBE_PROMPT = (
     "You are a narrator producing subtitles for a silent video.\n\n"
@@ -42,8 +45,7 @@ DESCRIBE_PROMPT = (
     "<skip>\n"
     "Omit static logo cards and branding screens — they carry no information "
     "a subtitle can add.\n"
-    "</skip>\n\n"
-    "Output in the video's original language."
+    "</skip>"
 )
 
 _TIMESTAMP_PATTERN = re.compile(
@@ -65,50 +67,26 @@ def _parse_timestamp(timestamp: str) -> timedelta:
     return timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
 
-def describe_video(
-    video_path: Path,
-    *,
-    source_lang: str = "en",  # noqa: ARG001
-) -> Subtitle:
-    """Analyze video frames with Gemini and return timestamped descriptions."""
-    if not video_path.exists():
-        raise ValueError(f"Video file not found: {video_path}")
+def _wait_for_active(client: Any, uploaded_file: Any) -> Any:
+    """Poll until the uploaded file reaches ACTIVE state or raise on failure."""
+    deadline = time.monotonic() + _FILE_PROCESSING_TIMEOUT
+    while uploaded_file.state == "PROCESSING":
+        if time.monotonic() >= deadline:
+            raise VisualDescriptionError("File processing timed out after 600 seconds")
+        time.sleep(2)
+        file_name = uploaded_file.name or ""
+        uploaded_file = client.files.get(name=file_name)
 
-    api_key = get_gemini_api_key()
+    if uploaded_file.state == "FAILED":
+        raise VisualDescriptionError("File processing failed on Gemini servers")
+    if uploaded_file.state != "ACTIVE":
+        raise VisualDescriptionError(f"Unexpected file state: {uploaded_file.state}")
+    return uploaded_file
 
-    if _genai is None:
-        raise VisualDescriptionError(
-            "google-genai package is not installed. Run: uv add google-genai"
-        )
 
-    settings = get_settings()
-
-    try:
-        client = _genai.Client(api_key=api_key)
-        uploaded_file = client.files.upload(file=video_path)
-
-        # Wait for file processing to complete
-        while uploaded_file.state == "PROCESSING":
-            time.sleep(2)
-            file_name = uploaded_file.name or ""
-            uploaded_file = client.files.get(name=file_name)
-        if uploaded_file.state != "ACTIVE":
-            raise VisualDescriptionError(
-                f"File processing failed with state: {uploaded_file.state}"
-            )
-
-        response = client.models.generate_content(
-            model=settings.visual_description_model,
-            contents=[uploaded_file, DESCRIBE_PROMPT],
-        )
-    except VisualDescriptionError:
-        raise
-    except Exception as exc:
-        raise VisualDescriptionError(f"Gemini API call failed: {exc}") from exc
-
-    response_text = response.text or ""
+def _parse_response(response_text: str) -> list[SubtitleEntry]:
+    """Parse Gemini response text into subtitle entries."""
     entries: list[SubtitleEntry] = []
-
     for line in response_text.splitlines():
         match = _TIMESTAMP_PATTERN.search(line)
         if not match:
@@ -133,7 +111,52 @@ def describe_video(
             )
         except (ValueError, IndexError):
             continue
+    return entries
 
+
+def describe_video(
+    video_path: Path,
+    *,
+    source_lang: str = "en",
+) -> Subtitle:
+    """Analyze video frames with Gemini and return timestamped descriptions."""
+    if not video_path.exists():
+        raise ValueError(f"Video file not found: {video_path}")
+
+    if _genai is None:
+        raise VisualDescriptionError(
+            "google-genai package is not installed. Run: uv add google-genai"
+        )
+
+    api_key = get_gemini_api_key()
+    settings = get_settings()
+
+    prompt = DESCRIBE_PROMPT
+    if source_lang and source_lang != "auto":
+        prompt += f"\n\nOutput in {source_lang}."
+    else:
+        prompt += "\n\nOutput in the video's original language."
+
+    uploaded_file = None
+    try:
+        client = _genai.Client(api_key=api_key)
+        uploaded_file = client.files.upload(file=video_path)
+        uploaded_file = _wait_for_active(client, uploaded_file)
+
+        response = client.models.generate_content(
+            model=settings.visual_description_model,
+            contents=[uploaded_file, prompt],
+        )
+    except VisualDescriptionError:
+        raise
+    except Exception as exc:
+        raise VisualDescriptionError(f"Gemini API call failed: {exc}") from exc
+    finally:
+        if uploaded_file and uploaded_file.name:
+            with contextlib.suppress(Exception):
+                client.files.delete(name=uploaded_file.name)
+
+    entries = _parse_response(response.text or "")
     if not entries:
         raise VisualDescriptionError("No visual description segments returned")
 

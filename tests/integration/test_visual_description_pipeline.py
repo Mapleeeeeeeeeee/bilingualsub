@@ -279,10 +279,10 @@ class TestVisualDescriptionPipeline:
         3. Inject DOWNLOAD_COMPLETE state
         4. POST /api/jobs/{job_id}/subtitle → 200
         5. Poll until failed (describe_video raises ValueError for missing key)
-        6. Assert error.code in {"invalid_input", "visual_description_failed"}
+        6. Assert error.code == "invalid_input"
         """
         # Step 1: remove the API key so describe_video raises ValueError
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.setenv("GEMINI_API_KEY", "")
         get_settings.cache_clear()
 
         app = create_app()
@@ -332,8 +332,7 @@ class TestVisualDescriptionPipeline:
         )
         error = status_data.get("error")
         assert error is not None, "Expected error detail in response"
-        # ValueError → "invalid_input"; VisualDescriptionError → "visual_description_failed"
-        assert error["code"] in {"invalid_input", "visual_description_failed"}, (
-            f"Expected error code 'invalid_input' or 'visual_description_failed', "
-            f"got {error['code']!r}"
+        # ValueError from missing API key → "invalid_input" via _ERROR_MAP
+        assert error["code"] == "invalid_input", (
+            f"Expected error code 'invalid_input', got {error['code']!r}"
         )

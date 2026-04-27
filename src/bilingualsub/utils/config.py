@@ -48,55 +48,23 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def get_groq_api_key() -> str:
-    """Get Groq API key from environment.
-
-    Returns:
-        Groq API key string
-
-    Raises:
-        ValueError: If GROQ_API_KEY is not set or empty
-    """
-    settings = get_settings()
-    if not settings.groq_api_key:
+def _require_api_key(attr: str, env_var: str) -> str:
+    value = getattr(get_settings(), attr)
+    if not value:
         raise ValueError(
-            "GROQ_API_KEY environment variable is not set. "
-            "Please set it with your Groq API key."
+            f"{env_var} environment variable is not set. "
+            f"Please set it with your {env_var} key."
         )
-    return settings.groq_api_key
+    return str(value)
+
+
+def get_groq_api_key() -> str:
+    return _require_api_key("groq_api_key", "GROQ_API_KEY")
 
 
 def get_openai_api_key() -> str:
-    """Get OpenAI API key from environment.
-
-    Returns:
-        OpenAI API key string
-
-    Raises:
-        ValueError: If OPENAI_API_KEY is not set or empty
-    """
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable is not set. "
-            "Please set it with your OpenAI API key."
-        )
-    return settings.openai_api_key
+    return _require_api_key("openai_api_key", "OPENAI_API_KEY")
 
 
 def get_gemini_api_key() -> str:
-    """Get Gemini API key from environment.
-
-    Returns:
-        Gemini API key string
-
-    Raises:
-        ValueError: If GEMINI_API_KEY is not set or empty
-    """
-    settings = get_settings()
-    if not settings.gemini_api_key:
-        raise ValueError(
-            "GEMINI_API_KEY environment variable is not set. "
-            "Please set it with your Gemini API key."
-        )
-    return settings.gemini_api_key
+    return _require_api_key("gemini_api_key", "GEMINI_API_KEY")

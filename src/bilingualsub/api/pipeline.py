@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from bilingualsub.api.constants import FileType, JobStatus, SSEEvent, SubtitleSource
+from bilingualsub.api.constants import (
+    FileType,
+    JobStatus,
+    ProcessingMode,
+    SSEEvent,
+    SubtitleSource,
+)
 from bilingualsub.api.errors import PipelineError
 
 if TYPE_CHECKING:
@@ -339,21 +345,23 @@ async def _merge_and_serialize(
     log.info("step_done", step="merge", duration_ms=int((time.monotonic() - t0) * 1000))
 
 
-async def _serialize_translated_only(job: Job, translated_sub: Subtitle) -> None:
+def _serialize_translated_only(
+    job: Job, translated_sub: Subtitle, work_dir: Path
+) -> None:
     """Serialize only the translated subtitle to SRT (no bilingual merge)."""
     _send_progress(
         job, JobStatus.MERGING, 70.0, "serialize", "Generating subtitle file..."
     )
-    work_dir = job.output_files[FileType.SOURCE_VIDEO].parent
 
     srt_content = serialize_srt(translated_sub)
     srt_path = work_dir / "subtitle.srt"
-    await asyncio.to_thread(srt_path.write_text, srt_content, "utf-8")
+    srt_path.write_text(srt_content, encoding="utf-8")
     job.output_files[FileType.SRT] = srt_path
 
 
 async def _run_visual_description_subtitle(job: Job) -> None:
     """Run visual description subtitle pipeline."""
+    log = logger.bind(job_id=job.id)
     try:
         video_path = job.output_files.get(FileType.SOURCE_VIDEO)
         if not video_path:
@@ -399,18 +407,15 @@ async def _run_visual_description_subtitle(job: Job) -> None:
         )
 
         # Serialize translated-only SRT (70-80%)
-        await _serialize_translated_only(job, translated_sub)
+        _serialize_translated_only(job, translated_sub, work_dir=video_path.parent)
 
         _send_complete(job)
 
     except PipelineError as exc:
         _send_error(job, exc.code, exc.message, exc.detail or "")
-        log = logger.bind(job_id=job.id)
         log.error("visual_description_failed", error_code=exc.code, error=str(exc))
-        raise
     except Exception as exc:
         pipeline_err = _to_pipeline_error(exc)
-        log = logger.bind(job_id=job.id)
         log.error(
             "visual_description_failed",
             error_code=pipeline_err.code,
@@ -422,14 +427,13 @@ async def _run_visual_description_subtitle(job: Job) -> None:
             pipeline_err.message,
             detail=str(exc),
         )
-        raise pipeline_err from exc
 
 
 async def run_subtitle(job: Job) -> None:
     """Phase 2: Transcribe -> Translate -> Merge -> Serialize."""
     log = logger.bind(job_id=job.id)
 
-    if job.processing_mode == "visual_description":
+    if job.processing_mode == ProcessingMode.VISUAL_DESCRIPTION:
         await _run_visual_description_subtitle(job)
         return
 
