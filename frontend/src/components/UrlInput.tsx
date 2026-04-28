@@ -28,6 +28,9 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
   const [url, setUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [processingMode, setProcessingMode] = useState<'subtitle' | 'visual_description'>(
+    'subtitle'
+  );
   const [rangeEnabled, setRangeEnabled] = useState(false);
   const [startTime, setStartTime] = useState<TimeParts>({
     hours: '00',
@@ -65,6 +68,7 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
       }
       const request: JobUploadRequest = {
         file: selectedFile,
+        processing_mode: processingMode,
       };
       if (startSeconds !== undefined) request.start_time = startSeconds;
       if (endSeconds !== undefined) request.end_time = endSeconds;
@@ -80,6 +84,7 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
 
     const request: JobCreateRequest = {
       source_url: url,
+      processing_mode: processingMode,
     };
     if (startSeconds !== undefined) request.start_time = startSeconds;
     if (endSeconds !== undefined) request.end_time = endSeconds;
@@ -149,6 +154,42 @@ export function UrlInput({ onSubmit, disabled }: UrlInputProps) {
         {error && (
           <p className="absolute -bottom-8 left-0 w-full text-center text-red-500 text-sm font-medium">
             {error}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {t('form.processingModeLabel')}
+          </span>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              setProcessingMode(prev => (prev === 'subtitle' ? 'visual_description' : 'subtitle'))
+            }
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              processingMode === 'visual_description'
+                ? 'bg-blue-600'
+                : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                processingMode === 'visual_description' ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {processingMode === 'visual_description'
+              ? t('form.processingModeVisual')
+              : t('form.processingModeSubtitle')}
+          </span>
+        </div>
+        {processingMode === 'visual_description' && (
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            {t('form.processingModeVisualHint')}
           </p>
         )}
       </div>

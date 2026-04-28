@@ -10,7 +10,13 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from bilingualsub.api.constants import FileType, JobStatus, SSEEvent, SubtitleSource
+from bilingualsub.api.constants import (
+    FileType,
+    JobStatus,
+    ProcessingMode,
+    SSEEvent,
+    SubtitleSource,
+)
 from bilingualsub.api.errors import PipelineError
 
 if TYPE_CHECKING:
@@ -23,6 +29,8 @@ from bilingualsub.core import (
     TranscriptionError,
     TranslationError,
     VideoMetadata,
+    VisualDescriptionError,
+    describe_video,
     download_video,
     merge_subtitles,
     transcribe_audio,
@@ -46,6 +54,10 @@ _ERROR_MAP: dict[type, tuple[str, str]] = {
     TranscriptionError: ("transcription_failed", "Failed to transcribe audio"),
     TranslationError: ("translation_failed", "Failed to translate subtitles"),
     FFmpegError: ("burn_failed", "Failed to burn subtitles into video"),
+    VisualDescriptionError: (
+        "visual_description_failed",
+        "Failed to analyze video content",
+    ),
     ValueError: ("invalid_input", "Invalid input"),
 }
 
@@ -275,13 +287,15 @@ async def run_download(job: Job) -> None:
 
     try:
         video_path, metadata = await _acquire_video(job, work_dir, log)
-        await _extract_audio_step(job, video_path, work_dir, log)
+        if job.processing_mode != ProcessingMode.VISUAL_DESCRIPTION:
+            await _extract_audio_step(job, video_path, work_dir, log)
 
         # Save metadata for subtitle phase
         job.video_width = metadata.width
         job.video_height = metadata.height
         job.video_title = metadata.title
         job.video_description = metadata.description
+        job.video_duration = metadata.duration
         job.output_files[FileType.SOURCE_VIDEO] = video_path
 
         _send_download_complete(job)
@@ -332,11 +346,105 @@ async def _merge_and_serialize(
     log.info("step_done", step="merge", duration_ms=int((time.monotonic() - t0) * 1000))
 
 
+def _serialize_translated_only(
+    job: Job, translated_sub: Subtitle, work_dir: Path
+) -> None:
+    """Serialize only the translated subtitle to SRT (no bilingual merge)."""
+    _send_progress(
+        job, JobStatus.MERGING, 70.0, "serialize", "Generating subtitle file..."
+    )
+
+    srt_content = serialize_srt(translated_sub)
+    srt_path = work_dir / "subtitle.srt"
+    srt_path.write_text(srt_content, encoding="utf-8")
+    job.output_files[FileType.SRT] = srt_path
+
+
+async def _run_visual_description_subtitle(job: Job) -> None:
+    """Run visual description subtitle pipeline."""
+    log = logger.bind(job_id=job.id)
+    try:
+        video_path = job.output_files.get(FileType.SOURCE_VIDEO)
+        if not video_path:
+            raise PipelineError("visual_description_failed", "Source video not found")
+
+        if job.video_duration > 5400.0:
+            raise PipelineError(
+                "video_too_long",
+                "Video exceeds 90-minute limit for visual description mode",
+            )
+
+        # Describe video (20-50%)
+        _send_progress(
+            job,
+            JobStatus.TRANSCRIBING,
+            20.0,
+            "describe",
+            "Analyzing video content...",
+        )
+        described_sub = await asyncio.to_thread(
+            describe_video, video_path, source_lang=job.source_lang
+        )
+        job.subtitle_source = SubtitleSource.VISUAL_DESCRIPTION
+
+        # Translate (50-70%)
+        _send_progress(
+            job,
+            JobStatus.TRANSLATING,
+            50.0,
+            "translate",
+            "Translating descriptions...",
+        )
+        translated_sub = await asyncio.to_thread(
+            translate_subtitle,
+            described_sub,
+            source_lang=job.source_lang,
+            target_lang=job.target_lang,
+            video_title=job.video_title,
+            video_description=job.video_description,
+            glossary_text=job.glossary_text,
+            on_progress=_make_translate_progress_cb(job),
+            on_rate_limit=_make_rate_limit_cb(job),
+        )
+
+        # Serialize translated-only SRT (70-80%)
+        _serialize_translated_only(job, translated_sub, work_dir=video_path.parent)
+
+        _send_complete(job)
+
+    except PipelineError as exc:
+        _send_error(job, exc.code, exc.message, exc.detail or "")
+        log.error("visual_description_failed", error_code=exc.code, error=str(exc))
+    except Exception as exc:
+        pipeline_err = _to_pipeline_error(exc)
+        log.error(
+            "visual_description_failed",
+            error_code=pipeline_err.code,
+            error=str(exc),
+        )
+        _send_error(
+            job,
+            pipeline_err.code,
+            pipeline_err.message,
+            detail=str(exc),
+        )
+
+
 async def run_subtitle(job: Job) -> None:
     """Phase 2: Transcribe -> Translate -> Merge -> Serialize."""
     log = logger.bind(job_id=job.id)
 
+    if job.processing_mode == ProcessingMode.VISUAL_DESCRIPTION:
+        await _run_visual_description_subtitle(job)
+        return
+
     try:
+        if FileType.AUDIO not in job.output_files:
+            video_path = job.output_files.get(FileType.SOURCE_VIDEO)
+            if not video_path:
+                raise PipelineError("pipeline_failed", "Source video not found")
+            await _extract_audio_step(job, video_path, video_path.parent, log)
+
         audio_path = job.output_files[FileType.AUDIO]
         work_dir = audio_path.parent
 

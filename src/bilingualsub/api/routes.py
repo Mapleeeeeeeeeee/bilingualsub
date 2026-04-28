@@ -18,6 +18,7 @@ from bilingualsub.api.constants import (
     SSE_KEEPALIVE_SECONDS,
     FileType,
     JobStatus,
+    ProcessingMode,
     SSEEvent,
 )
 from bilingualsub.api.errors import (
@@ -150,6 +151,7 @@ async def create_job(body: JobCreateRequest, request: Request) -> JobCreateRespo
         target_lang=body.target_lang,
         start_time=body.start_time,
         end_time=body.end_time,
+        processing_mode=ProcessingMode(body.processing_mode),
     )
     _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)
@@ -162,6 +164,7 @@ async def create_job_from_upload(
     target_lang: str = Form("zh-TW"),
     start_time: float | None = Form(None),
     end_time: float | None = Form(None),
+    processing_mode: str = Form(ProcessingMode.SUBTITLE),
     *,
     request: Request,
 ) -> JobCreateResponse:
@@ -175,6 +178,14 @@ async def create_job_from_upload(
         )
 
     safe_name = Path(filename).name or f"upload{suffix}"
+
+    try:
+        mode = ProcessingMode(processing_mode)
+    except ValueError as err:
+        raise InvalidRequestError(
+            "Invalid processing_mode",
+            detail=f"Must be one of: {', '.join(ProcessingMode)}",
+        ) from err
 
     max_size = _MAX_UPLOAD_BYTES
     tmp_dir = Path(tempfile.mkdtemp(prefix="bilingualsub_upload_"))
@@ -199,6 +210,7 @@ async def create_job_from_upload(
         start_time=start_time,
         end_time=end_time,
         local_video_path=saved_path,
+        processing_mode=mode,
     )
     _start_background_task(request, run_download(job))
     return JobCreateResponse(job_id=job.id)
@@ -296,6 +308,8 @@ async def start_subtitle(
             job.source_lang = body.source_lang
         if body.target_lang:
             job.target_lang = body.target_lang
+        if body.processing_mode is not None:
+            job.processing_mode = ProcessingMode(body.processing_mode)
     glossary_manager = _get_glossary_manager(request)
     job.glossary_text = glossary_manager.format_for_prompt()
     _start_background_task(request, run_subtitle(job))

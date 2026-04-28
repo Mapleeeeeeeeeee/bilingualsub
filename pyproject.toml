@@ -33,6 +33,7 @@ dependencies = [
     "ollama>=0.6.1",
     "openai>=2.17.0",
     "python-dotenv>=1.2.1",
+    "google-genai>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -135,6 +136,7 @@ module = [
     "agno.*",
     "ffmpeg.*",
     "openai.*",
+    "google.*",
 ]
 ignore_missing_imports = true
 

@@ -38,6 +38,7 @@ class ApiClient {
     if (request.target_lang) formData.append('target_lang', request.target_lang);
     if (request.start_time !== undefined) formData.append('start_time', String(request.start_time));
     if (request.end_time !== undefined) formData.append('end_time', String(request.end_time));
+    if (request.processing_mode) formData.append('processing_mode', request.processing_mode);
 
     const response = await fetch(`${this.baseUrl}/api/jobs/upload`, {
       method: 'POST',
@@ -105,11 +106,13 @@ class ApiClient {
   async startSubtitle(
     jobId: string,
     sourceLang?: string,
-    targetLang?: string
+    targetLang?: string,
+    processingMode?: string
   ): Promise<{ status: string }> {
-    const payload: { source_lang?: string; target_lang?: string } = {};
+    const payload: { source_lang?: string; target_lang?: string; processing_mode?: string } = {};
     if (sourceLang) payload.source_lang = sourceLang;
     if (targetLang) payload.target_lang = targetLang;
+    if (processingMode) payload.processing_mode = processingMode;
 
     const response = await fetch(`${this.baseUrl}/api/jobs/${jobId}/subtitle`, {
       method: 'POST',

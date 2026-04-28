@@ -59,7 +59,9 @@ export function ProgressTracker({
           {': '}
           {subtitleSource === SubtitleSource.YOUTUBE_MANUAL
             ? t('progress.subtitleSourceYoutube')
-            : t('progress.subtitleSourceWhisper')}
+            : subtitleSource === SubtitleSource.VISUAL_DESCRIPTION
+              ? t('progress.subtitleSourceVisual')
+              : t('progress.subtitleSourceWhisper')}
         </p>
       )}
     </div>

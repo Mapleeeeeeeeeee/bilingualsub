@@ -46,5 +46,6 @@ export const PIPELINE_STEPS = [
 export const SubtitleSource = {
   WHISPER: 'whisper',
   YOUTUBE_MANUAL: 'youtube_manual',
+  VISUAL_DESCRIPTION: 'visual_description',
 } as const;
 export type SubtitleSource = (typeof SubtitleSource)[keyof typeof SubtitleSource];

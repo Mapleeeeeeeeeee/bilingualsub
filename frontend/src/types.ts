@@ -1,11 +1,14 @@
 import type { FileType, JobStatus } from './constants';
 
+export type ProcessingMode = 'subtitle' | 'visual_description';
+
 export interface JobCreateRequest {
   source_url: string;
   source_lang?: string;
   target_lang?: string;
   start_time?: number; // seconds
   end_time?: number; // seconds
+  processing_mode?: ProcessingMode;
 }
 
 export interface JobCreateResponse {
@@ -48,6 +51,7 @@ export interface JobUploadRequest {
   target_lang?: string;
   start_time?: number;
   end_time?: number;
+  processing_mode?: ProcessingMode;
 }
 
 export interface RetranslateEntryPayload {

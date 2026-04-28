@@ -14,6 +14,8 @@ class Settings(BaseSettings):
         transcriber_provider: Whisper provider ("groq" or "openai")
         transcriber_model: Whisper model name
         translator_model: Agno model string (e.g. "ollama:model_id", "groq:model_id")
+        gemini_api_key: API key for Google Gemini visual description
+        visual_description_model: Gemini model name for visual description
     """
 
     groq_api_key: str = ""
@@ -24,6 +26,8 @@ class Settings(BaseSettings):
 
     translator_model: str = "groq:openai/gpt-oss-120b"
     glossary_path: str = "glossary.json"
+    gemini_api_key: str = ""
+    visual_description_model: str = "gemini-3.1-flash-lite-preview"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -46,37 +50,19 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def _require_api_key(value: str, env_var: str) -> str:
+    if not value:
+        raise ValueError(f"{env_var} environment variable is not set.")
+    return value
+
+
 def get_groq_api_key() -> str:
-    """Get Groq API key from environment.
-
-    Returns:
-        Groq API key string
-
-    Raises:
-        ValueError: If GROQ_API_KEY is not set or empty
-    """
-    settings = get_settings()
-    if not settings.groq_api_key:
-        raise ValueError(
-            "GROQ_API_KEY environment variable is not set. "
-            "Please set it with your Groq API key."
-        )
-    return settings.groq_api_key
+    return _require_api_key(get_settings().groq_api_key, "GROQ_API_KEY")
 
 
 def get_openai_api_key() -> str:
-    """Get OpenAI API key from environment.
+    return _require_api_key(get_settings().openai_api_key, "OPENAI_API_KEY")
 
-    Returns:
-        OpenAI API key string
 
-    Raises:
-        ValueError: If OPENAI_API_KEY is not set or empty
-    """
-    settings = get_settings()
-    if not settings.openai_api_key:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable is not set. "
-            "Please set it with your OpenAI API key."
-        )
-    return settings.openai_api_key
+def get_gemini_api_key() -> str:
+    return _require_api_key(get_settings().gemini_api_key, "GEMINI_API_KEY")

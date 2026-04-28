@@ -42,6 +42,14 @@ class SubtitleSource(StrEnum):
 
     WHISPER = "whisper"
     YOUTUBE_MANUAL = "youtube_manual"
+    VISUAL_DESCRIPTION = "visual_description"
+
+
+class ProcessingMode(StrEnum):
+    """Processing mode for a subtitle generation job."""
+
+    SUBTITLE = "subtitle"
+    VISUAL_DESCRIPTION = "visual_description"
 
 
 JOB_TTL_SECONDS = 1800

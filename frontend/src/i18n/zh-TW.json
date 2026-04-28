@@ -35,7 +35,11 @@
     "inputModeUrl": "影片網址",
     "inputModeFile": "上傳檔案",
     "filePlaceholder": "選擇影片或音訊檔案",
-    "fileSelected": "已選擇：{{filename}}"
+    "fileSelected": "已選擇：{{filename}}",
+    "processingModeLabel": "處理模式",
+    "processingModeSubtitle": "語音字幕",
+    "processingModeVisual": "視覺描述",
+    "processingModeVisualHint": "分析畫面內容產生字幕（適用於無語音影片）"
   },
   "lang": {
     "en": "英文",
@@ -55,6 +59,7 @@
     "subtitleSource": "字幕來源",
     "subtitleSourceYoutube": "YouTube（手動上傳）",
     "subtitleSourceWhisper": "Whisper 語音辨識",
+    "subtitleSourceVisual": "視覺描述",
     "nonYoutubeHint": "非 YouTube 平台的影片下載可能較慢"
   },
   "download": {
@@ -78,7 +83,9 @@
     "network_error": "網路連線錯誤",
     "unknown_error": "發生未知錯誤",
     "invalidTimeFormat": "時間格式不正確",
-    "invalidTimeRange": "結束時間必須大於開始時間"
+    "invalidTimeRange": "結束時間必須大於開始時間",
+    "visual_description_failed": "視覺分析失敗",
+    "video_too_long": "影片過長，視覺描述模式最長支援 90 分鐘"
   },
   "language_switcher": {
     "label": "語言"

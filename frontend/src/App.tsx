@@ -120,7 +120,9 @@ function App() {
                 </div>
               </div>
               <button
-                onClick={() => subtitleJob(sourceLang, targetLang)}
+                onClick={() =>
+                  subtitleJob(sourceLang, targetLang, state.processingMode ?? undefined)
+                }
                 className="px-8 py-3 bg-black text-white rounded-full hover:scale-105 transition-transform"
               >
                 {t('app.generate_subtitles')}
@@ -133,13 +135,15 @@ function App() {
                 >
                   {t('app.download_original_video')}
                 </a>
-                <a
-                  href={apiClient.getDownloadUrl(state.jobId!, FileType.AUDIO)}
-                  download
-                  className="text-sm text-gray-400 hover:text-black transition-colors"
-                >
-                  {t('app.download_audio')}
-                </a>
+                {state.processingMode !== 'visual_description' && (
+                  <a
+                    href={apiClient.getDownloadUrl(state.jobId!, FileType.AUDIO)}
+                    download
+                    className="text-sm text-gray-400 hover:text-black transition-colors"
+                  >
+                    {t('app.download_audio')}
+                  </a>
+                )}
                 <button
                   onClick={reset}
                   className="text-sm text-gray-400 hover:text-black transition-colors"
@@ -272,7 +276,11 @@ function App() {
               <div className="lg:col-span-1 space-y-8">
                 <div>
                   <h3 className="text-3xl font-serif mb-6">{t('app.downloads_title')}</h3>
-                  <DownloadLinks jobId={state.jobId!} showVideo={true} />
+                  <DownloadLinks
+                    jobId={state.jobId!}
+                    showVideo={true}
+                    processingMode={state.processingMode}
+                  />
                 </div>
                 <button
                   onClick={backToEdit}
