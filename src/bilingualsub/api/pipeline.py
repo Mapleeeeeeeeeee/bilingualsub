@@ -439,6 +439,12 @@ async def run_subtitle(job: Job) -> None:
         return
 
     try:
+        if FileType.AUDIO not in job.output_files:
+            video_path = job.output_files.get(FileType.SOURCE_VIDEO)
+            if not video_path:
+                raise PipelineError("pipeline_failed", "Source video not found")
+            await _extract_audio_step(job, video_path, video_path.parent, log)
+
         audio_path = job.output_files[FileType.AUDIO]
         work_dir = audio_path.parent
 

@@ -179,6 +179,14 @@ async def create_job_from_upload(
 
     safe_name = Path(filename).name or f"upload{suffix}"
 
+    try:
+        mode = ProcessingMode(processing_mode)
+    except ValueError as err:
+        raise InvalidRequestError(
+            "Invalid processing_mode",
+            detail=f"Must be one of: {', '.join(ProcessingMode)}",
+        ) from err
+
     max_size = _MAX_UPLOAD_BYTES
     tmp_dir = Path(tempfile.mkdtemp(prefix="bilingualsub_upload_"))
     saved_path = tmp_dir / safe_name
@@ -194,14 +202,6 @@ async def create_job_from_upload(
                     detail="Maximum file size is 500 MB",
                 )
             buf.write(chunk)
-
-    try:
-        mode = ProcessingMode(processing_mode)
-    except ValueError as err:
-        raise InvalidRequestError(
-            "Invalid processing_mode",
-            detail=f"Must be one of: {', '.join(ProcessingMode)}",
-        ) from err
 
     manager = _get_job_manager(request)
     job = manager.create_job(

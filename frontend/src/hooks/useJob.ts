@@ -1,6 +1,6 @@
 import { useCallback, useReducer, useRef } from 'react';
 import { JobStatus } from '../constants';
-import type { JobCreateRequest, JobUploadRequest, SSEProgressData } from '../types';
+import type { JobCreateRequest, JobUploadRequest, ProcessingMode, SSEProgressData } from '../types';
 import { apiClient } from '../api/client';
 
 // State type
@@ -21,12 +21,13 @@ interface JobState {
   progress: number;
   currentStep: string | null;
   subtitleSource: string | null;
+  processingMode: ProcessingMode | null;
   error: { code: string; message: string; detail?: string } | null;
 }
 
 // Action types
 type JobAction =
-  | { type: 'SUBMIT'; sourceUrl: string | null }
+  | { type: 'SUBMIT'; sourceUrl: string | null; processingMode: ProcessingMode | null }
   | { type: 'JOB_CREATED'; jobId: string }
   | { type: 'PROGRESS'; data: SSEProgressData }
   | { type: 'DOWNLOAD_COMPLETE' }
@@ -48,13 +49,19 @@ const initialState: JobState = {
   progress: 0,
   currentStep: null,
   subtitleSource: null,
+  processingMode: null,
   error: null,
 };
 
 function jobReducer(state: JobState, action: JobAction): JobState {
   switch (action.type) {
     case 'SUBMIT':
-      return { ...initialState, phase: 'submitting', sourceUrl: action.sourceUrl };
+      return {
+        ...initialState,
+        phase: 'submitting',
+        sourceUrl: action.sourceUrl,
+        processingMode: action.processingMode,
+      };
     case 'JOB_CREATED':
       return { ...state, phase: 'processing', jobId: action.jobId };
     case 'PROGRESS':
@@ -130,7 +137,9 @@ export function useJob() {
     async (request: JobCreateRequest | JobUploadRequest) => {
       cleanup();
       const sourceUrl = 'source_url' in request ? request.source_url : null;
-      dispatch({ type: 'SUBMIT', sourceUrl });
+      const processingMode =
+        'processing_mode' in request ? (request.processing_mode ?? null) : null;
+      dispatch({ type: 'SUBMIT', sourceUrl, processingMode });
 
       try {
         const response =
@@ -167,11 +176,11 @@ export function useJob() {
   );
 
   const subtitleJob = useCallback(
-    async (sourceLang?: string, targetLang?: string) => {
+    async (sourceLang?: string, targetLang?: string, processingMode?: string) => {
       if (!state.jobId) return;
       dispatch({ type: 'SUBTITLE_START' });
       try {
-        await apiClient.startSubtitle(state.jobId, sourceLang, targetLang);
+        await apiClient.startSubtitle(state.jobId, sourceLang, targetLang, processingMode);
         // Reconnect SSE if the previous connection was closed
         if (!eventSourceRef.current || eventSourceRef.current.readyState === EventSource.CLOSED) {
           eventSourceRef.current = apiClient.connectSSE(state.jobId, {

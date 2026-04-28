@@ -20,12 +20,15 @@ class TestDescribeVideo:
             yield mock
 
     @pytest.fixture
-    def mock_get_gemini_api_key(self):
-        """Mock get_gemini_api_key to return a fixed key."""
+    def mock_settings(self):
+        """Mock get_settings to return test configuration."""
+        mock = MagicMock()
+        mock.gemini_api_key = "fake-gemini-key"  # pragma: allowlist secret
+        mock.visual_description_model = "test-model"
         with patch(
-            "bilingualsub.core.visual_describer.get_gemini_api_key",
-            return_value="fake-gemini-key",
-        ) as mock:
+            "bilingualsub.core.visual_describer.get_settings",
+            return_value=mock,
+        ):
             yield mock
 
     # ------------------------------------------------------------------
@@ -53,7 +56,7 @@ class TestDescribeVideo:
     # ------------------------------------------------------------------
 
     def test_valid_response_parses_to_subtitle(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """Three well-formed lines produce a Subtitle with 3 entries."""
         response_text = (
@@ -91,9 +94,7 @@ class TestDescribeVideo:
         assert result.entries[2].start == timedelta(seconds=15)
         assert result.entries[2].end == timedelta(seconds=30)
 
-    def test_no_segments_raises_error(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
-    ):
+    def test_no_segments_raises_error(self, tmp_path, mock_genai, mock_settings):
         """Empty response text must raise VisualDescriptionError."""
         self._setup_client(mock_genai, "")
 
@@ -107,7 +108,7 @@ class TestDescribeVideo:
             describe_video(video_path, source_lang="en")
 
     def test_no_segments_unparseable_content_raises_error(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """Response with only unparseable lines must raise VisualDescriptionError."""
         self._setup_client(
@@ -124,7 +125,7 @@ class TestDescribeVideo:
             describe_video(video_path, source_lang="en")
 
     def test_api_error_raises_visual_description_error(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """Exception from generate_content is wrapped into VisualDescriptionError."""
         mock_client = MagicMock()
@@ -145,16 +146,17 @@ class TestDescribeVideo:
             describe_video(video_path, source_lang="en")
 
     def test_missing_api_key_raises_value_error(self, tmp_path, mock_genai):
-        """ValueError from get_gemini_api_key propagates unchanged."""
+        """ValueError from _require_api_key propagates unchanged."""
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake video content")
 
+        mock = MagicMock()
+        mock.gemini_api_key = ""
+        mock.visual_description_model = "test-model"
         with (
             patch(
-                "bilingualsub.core.visual_describer.get_gemini_api_key",
-                side_effect=ValueError(
-                    "GEMINI_API_KEY environment variable is not set"
-                ),
+                "bilingualsub.core.visual_describer.get_settings",
+                return_value=mock,
             ),
             pytest.raises(ValueError, match="GEMINI_API_KEY"),
         ):
@@ -167,9 +169,7 @@ class TestDescribeVideo:
         with pytest.raises(ValueError, match="Video file not found"):
             describe_video(video_path, source_lang="en")
 
-    def test_malformed_lines_are_skipped(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
-    ):
+    def test_malformed_lines_are_skipped(self, tmp_path, mock_genai, mock_settings):
         """Lines that don't match the timestamp pattern are silently ignored."""
         response_text = (
             "00:00 - 00:10 | Valid first entry\n"
@@ -191,7 +191,7 @@ class TestDescribeVideo:
         assert result.entries[1].text == "Valid second entry"
 
     def test_mixed_timestamp_formats_parsed_correctly(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """MM:SS and HH:MM:SS formats are both parsed correctly."""
         response_text = (
@@ -214,7 +214,7 @@ class TestDescribeVideo:
         assert result.entries[1].end == timedelta(hours=1, seconds=10)
 
     def test_reversed_and_equal_timestamps_are_skipped(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """Entries where start >= end are silently skipped."""
         response_text = (
@@ -232,9 +232,7 @@ class TestDescribeVideo:
         assert len(result.entries) == 1
         assert result.entries[0].text == "Valid entry"
 
-    def test_file_state_failed_raises_error(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
-    ):
+    def test_file_state_failed_raises_error(self, tmp_path, mock_genai, mock_settings):
         """Gemini file in FAILED state raises VisualDescriptionError."""
         mock_client = MagicMock()
         mock_genai.Client.return_value = mock_client
@@ -254,7 +252,7 @@ class TestDescribeVideo:
             describe_video(video_path, source_lang="en")
 
     def test_file_processing_timeout_raises_error(
-        self, tmp_path, mock_genai, mock_get_gemini_api_key
+        self, tmp_path, mock_genai, mock_settings
     ):
         """File stuck in PROCESSING state past timeout raises error."""
         mock_client = MagicMock()

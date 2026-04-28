@@ -2,7 +2,7 @@
 
 ## 概述
 
-在現有 download → subtitle → burn 三階段管線上，新增一條平行的字幕生成路徑：當使用者選擇「視覺描述」模式時，subtitle phase 以 `describe_video()` 取代 `transcribe_audio()`。Gemini 2.5 Flash 直接讀取影片檔（`FileType.SOURCE_VIDEO`）並回傳帶時間戳的畫面描述，再由現有 `translate_subtitle()` 翻譯成目標語言。因為視覺描述不存在「原文字幕」概念，merge 步驟跳過，只序列化目標語言 SRT。
+在現有 download → subtitle → burn 三階段管線上，新增一條平行的字幕生成路徑：當使用者選擇「視覺描述」模式時，subtitle phase 以 `describe_video()` 取代 `transcribe_audio()`。Gemini 3.1 Flash Lite Preview 直接讀取影片檔（`FileType.SOURCE_VIDEO`）並回傳帶時間戳的畫面描述，再由現有 `translate_subtitle()` 翻譯成目標語言。因為視覺描述不存在「原文字幕」概念，merge 步驟跳過，只序列化目標語言 SRT。
 
 ## Files to Create / Modify
 
@@ -52,7 +52,7 @@ def describe_video(
     *,
     source_lang: str = "en",
 ) -> Subtitle:
-    """Analyze video frames with Gemini 2.5 Flash and return timestamped descriptions.
+    """Analyze video frames with Gemini 3.1 Flash Lite Preview and return timestamped descriptions.
 
     Raises:
         VisualDescriptionError: If Gemini API fails or no segments can be parsed.

@@ -59,8 +59,8 @@
     "subtitleSource": "Source",
     "subtitleSourceYoutube": "YouTube (manual)",
     "subtitleSourceWhisper": "Whisper",
-    "nonYoutubeHint": "Non-YouTube platforms may take longer to download",
-    "describing": "Analyzing visual content..."
+    "subtitleSourceVisual": "Visual Description",
+    "nonYoutubeHint": "Non-YouTube platforms may take longer to download"
   },
   "download": {
     "title": "Download Results",

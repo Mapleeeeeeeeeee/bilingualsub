@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
-from bilingualsub.utils.config import get_gemini_api_key, get_settings
+from bilingualsub.utils.config import _require_api_key, get_settings
 
 try:
     from google import genai as _genai
@@ -72,10 +72,13 @@ def _wait_for_active(client: Any, uploaded_file: Any) -> Any:
     deadline = time.monotonic() + _FILE_PROCESSING_TIMEOUT
     while uploaded_file.state == "PROCESSING":
         if time.monotonic() >= deadline:
-            raise VisualDescriptionError("File processing timed out after 600 seconds")
+            raise VisualDescriptionError(
+                f"File processing timed out after {_FILE_PROCESSING_TIMEOUT} seconds"
+            )
         time.sleep(2)
-        file_name = uploaded_file.name or ""
-        uploaded_file = client.files.get(name=file_name)
+        if not uploaded_file.name:
+            raise VisualDescriptionError("Uploaded file has no name identifier")
+        uploaded_file = client.files.get(name=uploaded_file.name)
 
     if uploaded_file.state == "FAILED":
         raise VisualDescriptionError("File processing failed on Gemini servers")
@@ -128,8 +131,8 @@ def describe_video(
             "google-genai package is not installed. Run: uv add google-genai"
         )
 
-    api_key = get_gemini_api_key()
     settings = get_settings()
+    api_key = _require_api_key(settings.gemini_api_key, "GEMINI_API_KEY")
 
     prompt = DESCRIBE_PROMPT
     if source_lang and source_lang != "auto":

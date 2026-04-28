@@ -4,10 +4,12 @@ import { FileType } from '../constants';
 import { apiClient } from '../api/client';
 import { DisclaimerDialog } from './DisclaimerDialog';
 import { triggerDownload } from '../utils/download';
+import type { ProcessingMode } from '../types';
 
 interface DownloadLinksProps {
   jobId: string;
   showVideo?: boolean;
+  processingMode?: ProcessingMode | null;
 }
 
 const FILE_OPTIONS = [
@@ -17,12 +19,20 @@ const FILE_OPTIONS = [
   { type: FileType.AUDIO, labelKey: 'download.audio' },
 ] as const;
 
-export function DownloadLinks({ jobId, showVideo }: DownloadLinksProps) {
+export function DownloadLinks({ jobId, showVideo, processingMode }: DownloadLinksProps) {
   const { t } = useTranslation();
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
-  const visibleOptions =
-    showVideo === false ? FILE_OPTIONS.filter(opt => opt.type !== FileType.VIDEO) : FILE_OPTIONS;
+  let visibleOptions =
+    showVideo === false
+      ? FILE_OPTIONS.filter(opt => opt.type !== FileType.VIDEO)
+      : [...FILE_OPTIONS];
+
+  if (processingMode === 'visual_description') {
+    visibleOptions = visibleOptions.filter(
+      opt => opt.type !== FileType.ASS && opt.type !== FileType.AUDIO
+    );
+  }
 
   return (
     <>

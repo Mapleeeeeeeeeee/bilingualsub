@@ -14,6 +14,8 @@ class Settings(BaseSettings):
         transcriber_provider: Whisper provider ("groq" or "openai")
         transcriber_model: Whisper model name
         translator_model: Agno model string (e.g. "ollama:model_id", "groq:model_id")
+        gemini_api_key: API key for Google Gemini visual description
+        visual_description_model: Gemini model name for visual description
     """
 
     groq_api_key: str = ""
@@ -50,10 +52,7 @@ def get_settings() -> Settings:
 
 def _require_api_key(value: str, env_var: str) -> str:
     if not value:
-        raise ValueError(
-            f"{env_var} environment variable is not set. "
-            f"Please set it with your {env_var} key."
-        )
+        raise ValueError(f"{env_var} environment variable is not set.")
     return value
 
 
