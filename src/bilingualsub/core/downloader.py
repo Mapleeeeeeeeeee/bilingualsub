@@ -29,6 +29,7 @@ class VideoMetadata:
     height: int
     fps: float
     description: str = ""
+    has_audio: bool = True
 
     def __post_init__(self) -> None:
         """Validate metadata constraints."""
@@ -279,6 +280,16 @@ def _extract_metadata_from_info_dict(
     if fps is None or fps <= 0:
         fps = 30.0
 
+    # Detect audio: check acodec field and requested_formats
+    acodec = info_dict.get("acodec", "none")
+    has_audio = acodec not in ("none", None)
+    if not has_audio:
+        # Also check requested_formats for separate audio streams
+        requested_formats = info_dict.get("requested_formats") or []
+        has_audio = any(
+            fmt.get("acodec", "none") not in ("none", None) for fmt in requested_formats
+        )
+
     return VideoMetadata(
         title=title,
         duration=float(duration),
@@ -286,6 +297,7 @@ def _extract_metadata_from_info_dict(
         height=int(height),
         fps=float(fps),
         description=_sanitize_description(info_dict.get("description", "")),
+        has_audio=has_audio,
     )
 
 
@@ -320,6 +332,8 @@ def _extract_metadata_with_ffprobe(video_path: Path) -> VideoMetadata:
     if not video_stream:
         raise DownloadError("No video stream found in file")
 
+    has_audio = any(s.get("codec_type") == "audio" for s in data.get("streams", []))
+
     # Extract metadata
     try:
         title = data.get("format", {}).get("tags", {}).get("title", video_path.stem)
@@ -341,4 +355,5 @@ def _extract_metadata_with_ffprobe(video_path: Path) -> VideoMetadata:
         width=width,
         height=height,
         fps=fps,
+        has_audio=has_audio,
     )

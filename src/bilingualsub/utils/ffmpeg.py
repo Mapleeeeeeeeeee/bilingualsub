@@ -260,7 +260,7 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
         video_path: Path to the video file
 
     Returns:
-        Dict with keys: title, duration, width, height, fps
+        Dict with keys: title, duration, width, height, fps, has_audio
 
     Raises:
         FFmpegError: If ffprobe fails or no video stream found
@@ -298,6 +298,8 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
     if not video_stream:
         raise FFmpegError(f"No video stream found in {video_path}")
 
+    has_audio = any(s.get("codec_type") == "audio" for s in data.get("streams", []))
+
     try:
         title = data.get("format", {}).get("tags", {}).get("title", video_path.stem)
         duration = float(data.get("format", {}).get("duration", 0))
@@ -317,6 +319,7 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
         "width": width,
         "height": height,
         "fps": fps,
+        "has_audio": has_audio,
     }
 
 
