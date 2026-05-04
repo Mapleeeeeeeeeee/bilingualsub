@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from bilingualsub.api.constants import FileType, JobStatus, SSEEvent
+from bilingualsub.api.constants import FileType, JobStatus, ProcessingMode, SSEEvent
 from bilingualsub.api.jobs import Job
 from bilingualsub.api.pipeline import run_download, run_subtitle
 from bilingualsub.core.downloader import DownloadError, VideoMetadata
@@ -215,6 +215,52 @@ class TestRunDownload:
         assert error_events[0]["data"]["code"] == "burn_failed"
         assert "ffmpeg segfault" in error_events[0]["data"]["detail"]
         assert job.status == JobStatus.FAILED
+
+    @patch("bilingualsub.api.pipeline.download_video")
+    async def test_run_download_no_audio_switches_to_visual_description(
+        self, mock_download
+    ) -> None:
+        """When video has no audio stream, auto-switch to visual description mode."""
+        metadata = VideoMetadata(
+            title="Silent Video",
+            duration=60.0,
+            width=1920,
+            height=1080,
+            fps=30.0,
+            has_audio=False,
+        )
+        mock_download.return_value = metadata
+
+        job = _make_job()
+        assert job.processing_mode == ProcessingMode.SUBTITLE
+
+        await run_download(job)
+
+        assert job.processing_mode == ProcessingMode.VISUAL_DESCRIPTION
+        assert job.status == JobStatus.DOWNLOAD_COMPLETE
+
+    @patch("bilingualsub.api.pipeline.extract_audio")
+    @patch("bilingualsub.api.pipeline.download_video")
+    async def test_run_download_with_audio_keeps_subtitle_mode(
+        self, mock_download, mock_extract_audio
+    ) -> None:
+        """When video has audio stream, processing mode stays as SUBTITLE."""
+        metadata = VideoMetadata(
+            title="Normal Video",
+            duration=60.0,
+            width=1920,
+            height=1080,
+            fps=30.0,
+            has_audio=True,
+        )
+        mock_download.return_value = metadata
+
+        job = _make_job()
+        await run_download(job)
+
+        assert job.processing_mode == ProcessingMode.SUBTITLE
+        assert job.status == JobStatus.DOWNLOAD_COMPLETE
+        mock_extract_audio.assert_called_once()
 
 
 @pytest.mark.unit

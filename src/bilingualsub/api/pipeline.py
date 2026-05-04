@@ -223,6 +223,7 @@ async def _acquire_video(
             width=int(meta_dict["width"]),
             height=int(meta_dict["height"]),
             fps=float(meta_dict["fps"]),
+            has_audio=bool(meta_dict.get("has_audio", True)),
         )
         log.info("step_done", step="upload", source=str(video_path))
         return video_path, metadata
@@ -288,7 +289,14 @@ async def run_download(job: Job) -> None:
     try:
         video_path, metadata = await _acquire_video(job, work_dir, log)
         if job.processing_mode != ProcessingMode.VISUAL_DESCRIPTION:
-            await _extract_audio_step(job, video_path, work_dir, log)
+            if not metadata.has_audio:
+                log.info(
+                    "no_audio_stream_detected",
+                    msg="Auto-switching to visual description mode",
+                )
+                job.processing_mode = ProcessingMode.VISUAL_DESCRIPTION
+            else:
+                await _extract_audio_step(job, video_path, work_dir, log)
 
         # Save metadata for subtitle phase
         job.video_width = metadata.width
