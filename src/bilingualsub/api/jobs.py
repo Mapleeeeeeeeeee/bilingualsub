@@ -46,10 +46,13 @@ class Job:
     video_height: int = 0
     video_title: str = ""
     video_description: str = ""
+    video_channel: str = ""  # channel name; empty → skip intro flow
+    video_channel_url: str = ""  # channel URL; empty → omit channel URL line in intro
     glossary_text: str = ""
     subtitle_source: str = ""
     processing_mode: ProcessingMode = ProcessingMode.SUBTITLE
     video_duration: float = 0.0
+    video_fps: float = 0.0
     output_files: dict[FileType, Path] = field(default_factory=dict)
     event_queue: asyncio.Queue[dict[str, object]] = field(default_factory=asyncio.Queue)
     created_at: float = field(default_factory=time.monotonic)
