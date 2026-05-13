@@ -26,6 +26,7 @@ COPY frontend/ frontend/
 RUN cd frontend && pnpm install --frozen-lockfile && pnpm build
 
 # Copy source
+COPY assets/ assets/
 COPY src/ src/
 
 EXPOSE 7860

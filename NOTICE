@@ -1,0 +1,25 @@
+BilingualSub
+Copyright 2024-2026 Maple (mapleee723@gmail.com)
+
+Licensed under the Apache License, Version 2.0.
+
+== Trademark Notice ==
+
+"BilingualSub" is the product name of this project. Per Section 6 of the
+Apache License 2.0, this license does not grant permission to use the trade
+names, trademarks, service marks, or product names of the Licensor, except
+as required for reasonable and customary use in describing the origin of the
+Work.
+
+If you create a modified version of this software, you must not distribute
+it under the name "BilingualSub" without explicit written permission from
+the copyright holder. This includes, but is not limited to, the product
+name displayed in video intros, watermarks, and user interfaces.
+
+== Third-Party Fonts ==
+
+This project bundles font files under the SIL Open Font License, Version 1.1.
+See assets/fonts/LICENSE for details.
+
+- LINE Seed Sans: Copyright (c) 2022 LINE Corporation
+- Noto Sans TC: Copyright (c) 2012-2024 Google LLC

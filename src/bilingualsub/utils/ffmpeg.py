@@ -10,6 +10,30 @@ from pathlib import Path
 
 import ffmpeg
 
+# ---------------------------------------------------------------------------
+# Bundled font paths — assets/fonts/ next to the project root
+# ---------------------------------------------------------------------------
+
+_ASSETS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "assets" / "fonts"
+_FONT_EN_REGULAR = _ASSETS_DIR / "LINESeedSans_Rg.ttf"
+_FONT_EN_BOLD = _ASSETS_DIR / "LINESeedSans_Bd.ttf"
+_FONT_ZH_REGULAR = _ASSETS_DIR / "NotoSansTC-Regular.ttf"
+_FONT_ZH_BOLD = _ASSETS_DIR / "NotoSansTC-Bold.ttf"
+
+
+def _font_arg(fontfile: Path, fallback_name: str) -> str:
+    """Return a drawtext font option.
+
+    Uses ``fontfile='<path>'`` when the bundled file exists, otherwise falls
+    back to ``font='<name>'`` so the filter chain still works without the
+    assets directory (e.g. inside Docker where system fonts are available).
+    """
+    if fontfile.exists():
+        # fontfile= needs an absolute path; resolve() guarantees that.
+        escaped = str(fontfile.resolve()).replace("'", "'").replace(":", r"\:")
+        return f"fontfile='{escaped}'"
+    return f"font='{fallback_name}'"
+
 
 class FFmpegError(Exception):
     """Exception raised when FFmpeg operations fail."""
@@ -96,7 +120,7 @@ def _append_watermark_drawtext(vf_filter: str, watermark_text: str) -> str:
     safe_text = _escape_drawtext(watermark_text)
     watermark_drawtext = (
         f"drawtext=text='{safe_text}'"
-        ":font='Arial'"
+        f":{_font_arg(_FONT_EN_REGULAR, 'Arial')}"
         ":fontsize=16"
         ":fontcolor=white@0.6"
         ":shadowcolor=black@0.8"
@@ -492,7 +516,7 @@ def generate_intro(  # noqa: PLR0915
 
     def _dt(
         text: str,
-        font: str,
+        font_spec: str,
         fontsize: int,
         fontcolor: str,
         x: str,
@@ -500,11 +524,16 @@ def generate_intro(  # noqa: PLR0915
         enable_expr: str,
         fade_start: float,
     ) -> str:
+        """Build a drawtext filter block.
+
+        ``font_spec`` is the output of ``_font_arg()`` — either
+        ``fontfile='<path>'`` or ``font='<name>'``.
+        """
         safe = _escape_drawtext(text)
         alpha_expr = f"if(lt(t,{fade_start:.1f}),0,min((t-{fade_start:.1f})/0.3,1))"
         return (
             f"drawtext=text='{safe}'"
-            f":font='{font}'"
+            f":{font_spec}"
             f":fontsize={fontsize}"
             f":fontcolor={fontcolor}"
             f":x={x}"
@@ -514,19 +543,20 @@ def generate_intro(  # noqa: PLR0915
             ":fix_bounds=1"
         )
 
-    # Y positions scaled to video height
-    y_eyebrow = int(height * 0.14)
-    y_chinese_label = y_eyebrow + int(height / 25)
-    y_channel = y_chinese_label + int(height / 22)
-    y_channel_url = y_channel + int(height / 20)
-    y_title = (y_channel_url if channel_url else y_channel) + int(height / 22)
-    y_video_url = y_title + int(height / 28)
-    y_decl_zh_1 = y_video_url + int(height / 20)
-    y_decl_zh_2 = y_decl_zh_1 + int(height / 40)
-    y_decl_zh_3 = y_decl_zh_2 + int(height / 40)
-    y_decl_en_1 = y_decl_zh_3 + int(height / 30)
-    y_decl_en_2 = y_decl_en_1 + int(height / 44)
-    y_decl_en_3 = y_decl_en_2 + int(height / 44)
+    # Y positions: vertically centered with generous spacing
+    # Total content height ~50% of frame, starting at ~28%
+    y_eyebrow = int(height * 0.22)
+    y_chinese_label = y_eyebrow + int(height * 0.04)
+    y_channel = y_chinese_label + int(height * 0.05)
+    y_channel_url = y_channel + int(height * 0.055)
+    y_title = (y_channel_url if channel_url else y_channel) + int(height * 0.06)
+    y_video_url = y_title + int(height * 0.04)
+    y_decl_zh_1 = y_video_url + int(height * 0.06)
+    y_decl_zh_2 = y_decl_zh_1 + int(height * 0.03)
+    y_decl_zh_3 = y_decl_zh_2 + int(height * 0.03)
+    y_decl_en_1 = y_decl_zh_3 + int(height * 0.04)
+    y_decl_en_2 = y_decl_en_1 + int(height * 0.028)
+    y_decl_en_3 = y_decl_en_2 + int(height * 0.028)
 
     x_left = str(left_margin)
     x_brand = f"w-tw-{int(width * 0.04)}"
@@ -545,7 +575,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             "ORIGINAL VIDEO FROM",
-            "Arial",
+            _font_arg(_FONT_EN_REGULAR, "Arial"),
             max(1, int(height / 54)),
             "white@0.3",
             x_left,
@@ -560,7 +590,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             "原始影片來自",
-            "serif",
+            _font_arg(_FONT_ZH_REGULAR, "serif"),
             max(1, int(height / 42)),
             "white@0.6",
             x_left,
@@ -575,7 +605,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             channel,
-            "Arial",
+            _font_arg(_FONT_EN_BOLD, "Arial"),
             max(1, int(height / 17)),
             "white@1.0",
             x_left,
@@ -591,7 +621,7 @@ def generate_intro(  # noqa: PLR0915
         blocks.append(
             _dt(
                 channel_url,
-                "Arial",
+                _font_arg(_FONT_EN_REGULAR, "Arial"),
                 max(1, int(height / 49)),
                 "white@0.35",
                 x_left,
@@ -606,7 +636,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             video_title,
-            "serif",
+            _font_arg(_FONT_ZH_REGULAR, "serif"),
             max(1, int(height / 34)),
             "white@0.7",
             x_left,
@@ -621,7 +651,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             video_url,
-            "Arial",
+            _font_arg(_FONT_EN_REGULAR, "Arial"),
             max(1, int(height / 45)),
             "white@0.5",
             x_left,
@@ -633,7 +663,7 @@ def generate_intro(  # noqa: PLR0915
 
     # Chinese declaration (3 lines)
     decl_zh = [
-        "翻譯字幕由開源專案 BilingualSub 產生",
+        "翻譯字幕使用開源專案 BilingualSub 製作",
         "所有內容及著作權屬於原始創作者所有",
         "如需移除，請聯繫上傳者",  # noqa: RUF001
     ]
@@ -643,7 +673,7 @@ def generate_intro(  # noqa: PLR0915
         blocks.append(
             _dt(
                 line,
-                "serif",
+                _font_arg(_FONT_ZH_REGULAR, "serif"),
                 max(1, int(height / 45)),
                 "white@0.45",
                 x_left,
@@ -655,7 +685,7 @@ def generate_intro(  # noqa: PLR0915
 
     # English declaration (3 lines)
     decl_en = [
-        "Subtitles generated by BilingualSub (open source)",
+        "Subtitles created with BilingualSub (open source)",
         "All content and copyrights belong to the original creator",
         "For removal requests, please contact the uploader",
     ]
@@ -665,7 +695,7 @@ def generate_intro(  # noqa: PLR0915
         blocks.append(
             _dt(
                 line,
-                "Arial",
+                _font_arg(_FONT_EN_REGULAR, "Arial"),
                 max(1, int(height / 49)),
                 "white@0.35",
                 x_left,
@@ -679,7 +709,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             "BilingualSub",
-            "Arial",
+            _font_arg(_FONT_EN_REGULAR, "Arial"),
             max(1, int(height / 54)),
             "white@0.25",
             x_brand,
