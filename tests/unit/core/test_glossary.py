@@ -2,7 +2,12 @@
 
 import pytest
 
-from bilingualsub.core.glossary import GlossaryEntry, GlossaryError, GlossaryManager
+from bilingualsub.core.glossary import (
+    GlossaryEntry,
+    GlossaryError,
+    GlossaryManager,
+    extract_source_terms,
+)
 
 
 @pytest.mark.unit
@@ -119,3 +124,22 @@ class TestGlossaryManager:
         manager.add("Alpha", "Alpha")
         entries = manager.get_all()
         assert [e.source for e in entries] == ["agent", "Alpha", "Zebra"]
+
+
+@pytest.mark.unit
+class TestExtractSourceTerms:
+    def test_given_empty_string_when_extract_then_returns_empty_list(self):
+        assert extract_source_terms("") == []
+
+    def test_given_formatted_glossary_when_extract_then_returns_source_terms(self):
+        text = "以下是術語表，請嚴格依照此表翻譯對應的專有名詞：\nClaude → 克勞德\nGPT → GPT"
+        result = extract_source_terms(text)
+        assert result == ["Claude", "GPT"]
+
+    def test_given_single_entry_when_extract_then_returns_one_term(self):
+        text = "以下是術語表，請嚴格依照此表翻譯對應的專有名詞：\nWhisper → Whisper"
+        assert extract_source_terms(text) == ["Whisper"]
+
+    def test_given_no_arrow_lines_when_extract_then_skips_them(self):
+        text = "Header line\nno arrow here\nClaude → 克勞德"
+        assert extract_source_terms(text) == ["Claude"]

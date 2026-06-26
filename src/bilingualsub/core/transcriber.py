@@ -11,18 +11,40 @@ from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.utils.config import get_groq_api_key, get_openai_api_key, get_settings
 from bilingualsub.utils.ffmpeg import split_audio
 
+_MAX_WHISPER_PROMPT_CHARS = 800
+
 
 class TranscriptionError(Exception):
     """Raised when audio transcription fails."""
 
 
-def _transcribe_single(audio_path: Path, *, language: str, settings: Any) -> Subtitle:
+def build_whisper_prompt(
+    video_title: str = "",
+    glossary_terms: list[str] | None = None,
+) -> str | None:
+    parts: list[str] = []
+    if video_title:
+        parts.append(video_title.strip())
+    if glossary_terms:
+        parts.append(", ".join(glossary_terms))
+    if not parts:
+        return None
+    prompt = ". ".join(parts)
+    if len(prompt) > _MAX_WHISPER_PROMPT_CHARS:
+        return prompt[:_MAX_WHISPER_PROMPT_CHARS]
+    return prompt
+
+
+def _transcribe_single(
+    audio_path: Path, *, language: str, settings: Any, prompt: str | None = None
+) -> Subtitle:
     """Transcribe a single audio file (must be <= 25MB).
 
     Args:
         audio_path: Path to audio file
         language: ISO 639-1 language code
         settings: Application settings
+        prompt: Optional hint text to guide transcription accuracy
 
     Returns:
         Subtitle object with transcribed entries
@@ -45,12 +67,15 @@ def _transcribe_single(audio_path: Path, *, language: str, settings: Any) -> Sub
 
     try:
         with audio_path.open("rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                file=(audio_path.name, audio_file),
-                model=settings.transcriber_model,
-                response_format="verbose_json",
-                language=language,
-            )
+            create_kwargs: dict[str, Any] = {
+                "file": (audio_path.name, audio_file),
+                "model": settings.transcriber_model,
+                "response_format": "verbose_json",
+                "language": language,
+            }
+            if prompt:
+                create_kwargs["prompt"] = prompt
+            transcription = client.audio.transcriptions.create(**create_kwargs)
     except Exception as e:
         raise TranscriptionError(f"Failed to transcribe audio: {e}") from e
 
@@ -76,7 +101,9 @@ def _transcribe_single(audio_path: Path, *, language: str, settings: Any) -> Sub
         raise TranscriptionError(f"Failed to parse transcription result: {e}") from e
 
 
-def transcribe_audio(audio_path: Path, *, language: str = "en") -> Subtitle:
+def transcribe_audio(
+    audio_path: Path, *, language: str = "en", prompt: str | None = None
+) -> Subtitle:
     """
     Transcribe audio file to subtitle using Whisper API.
 
@@ -85,6 +112,8 @@ def transcribe_audio(audio_path: Path, *, language: str = "en") -> Subtitle:
     Args:
         audio_path: Path to audio/video file
         language: ISO 639-1 language code (e.g., "en", "zh", "ja")
+        prompt: Optional hint text (e.g., from build_whisper_prompt) to improve
+                proper noun recognition
 
     Returns:
         Subtitle object with transcribed entries
@@ -99,12 +128,14 @@ def transcribe_audio(audio_path: Path, *, language: str = "en") -> Subtitle:
     if not audio_path.is_file():
         raise ValueError(f"Audio path is not a file: {audio_path}")
 
-    language = language.split("-")[0]
+    language = language.split("-", maxsplit=1)[0]
     settings = get_settings()
 
     file_size_mb = audio_path.stat().st_size / (1024 * 1024)
     if file_size_mb <= 25:
-        return _transcribe_single(audio_path, language=language, settings=settings)
+        return _transcribe_single(
+            audio_path, language=language, settings=settings, prompt=prompt
+        )
 
     # Large file: split into chunks and transcribe each
 
@@ -112,7 +143,9 @@ def transcribe_audio(audio_path: Path, *, language: str = "en") -> Subtitle:
     all_entries: list[SubtitleEntry] = []
     idx = 1
     for chunk_path, time_offset in chunks:
-        subtitle = _transcribe_single(chunk_path, language=language, settings=settings)
+        subtitle = _transcribe_single(
+            chunk_path, language=language, settings=settings, prompt=prompt
+        )
         offset_td = timedelta(seconds=time_offset)
         for entry in subtitle.entries:
             all_entries.append(

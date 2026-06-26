@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from bilingualsub.core.subtitle import Subtitle
-from bilingualsub.core.transcriber import TranscriptionError, transcribe_audio
+from bilingualsub.core.transcriber import (
+    TranscriptionError,
+    build_whisper_prompt,
+    transcribe_audio,
+)
 from bilingualsub.utils.config import get_settings
 
 
@@ -417,3 +421,89 @@ class TestTranscribeAudio:
         mock_split.assert_not_called()
         assert isinstance(result, Subtitle)
         assert len(result.entries) == 2
+
+
+@pytest.mark.unit
+class TestWhisperPrompt:
+    """Test cases for build_whisper_prompt and prompt passthrough in transcription."""
+
+    @pytest.fixture(autouse=True)
+    def clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    @pytest.fixture
+    def mock_groq(self):
+        with patch("bilingualsub.core.transcriber.Groq") as mock:
+            yield mock
+
+    @pytest.fixture
+    def valid_verbose_json_response(self):
+        response = Mock()
+        response.segments = [
+            {"id": 0, "start": 0.0, "end": 2.0, "text": " Hello world"},
+        ]
+        return response
+
+    def test_build_whisper_prompt_with_title_only(self):
+        result = build_whisper_prompt(video_title="My Product Review")
+        assert result == "My Product Review"
+
+    def test_build_whisper_prompt_with_terms_only(self):
+        result = build_whisper_prompt(glossary_terms=["Claude", "GPT"])
+        assert result == "Claude, GPT"
+
+    def test_build_whisper_prompt_with_title_and_terms(self):
+        result = build_whisper_prompt(
+            video_title="My Product Review", glossary_terms=["Claude", "GPT"]
+        )
+        assert result == "My Product Review. Claude, GPT"
+
+    def test_build_whisper_prompt_empty(self):
+        result = build_whisper_prompt()
+        assert result is None
+
+    def test_build_whisper_prompt_truncates_long_input(self):
+        long_title = "A" * 900
+        result = build_whisper_prompt(video_title=long_title)
+        assert result is not None
+        assert len(result) == 800
+
+    def test_transcribe_single_passes_prompt_to_api(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        transcribe_audio(audio_path, prompt="My Product Review. Claude, GPT")
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        assert call_kwargs["prompt"] == "My Product Review. Claude, GPT"
+
+    def test_transcribe_single_omits_prompt_when_none(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        transcribe_audio(audio_path)
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        assert "prompt" not in call_kwargs

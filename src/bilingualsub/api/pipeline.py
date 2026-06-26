@@ -36,7 +36,9 @@ from bilingualsub.core import (
     transcribe_audio,
     translate_subtitle,
 )
+from bilingualsub.core.glossary import extract_source_terms
 from bilingualsub.core.subtitle_fetcher import fetch_manual_subtitle
+from bilingualsub.core.transcriber import build_whisper_prompt
 from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
 from bilingualsub.utils import (
     FFmpegError,
@@ -491,8 +493,16 @@ async def run_subtitle(job: Job) -> None:
                 job, JobStatus.TRANSCRIBING, 20.0, "transcribe", "Transcribing audio"
             )
             t0 = time.monotonic()
+            glossary_terms = extract_source_terms(job.glossary_text)
+            whisper_prompt = build_whisper_prompt(
+                video_title=job.video_title,
+                glossary_terms=glossary_terms or None,
+            )
             original_sub = await asyncio.to_thread(
-                transcribe_audio, audio_path, language=job.source_lang
+                transcribe_audio,
+                audio_path,
+                language=job.source_lang,
+                prompt=whisper_prompt,
             )
             log.info(
                 "step_done",
