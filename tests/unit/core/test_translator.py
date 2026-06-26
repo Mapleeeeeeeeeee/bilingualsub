@@ -4,11 +4,14 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from agno.models.openai import OpenAIChat
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.translator import (
+    _PROXY_PLACEHOLDER_API_KEY,
     RetranslateEntry,
     TranslationError,
+    _build_model,
     _parse_batch_response,
     retranslate_entries,
     translate_subtitle,
@@ -728,3 +731,129 @@ class TestTranslationMetadataAndPartial:
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
         with pytest.raises(ValueError, match="selected_indices not found"):
             retranslate_entries(entries=entries, selected_indices=[2])
+
+
+@pytest.mark.unit
+class TestBuildModel:
+    """Test cases for _build_model helper."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    def test_given_groq_model_when_build_model_then_returns_raw_string(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "groq:openai/gpt-oss-120b")
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        get_settings.cache_clear()
+
+        result = _build_model(get_settings())
+
+        assert result == "groq:openai/gpt-oss-120b"
+
+    def test_given_openai_model_without_base_url_when_build_model_then_returns_raw_string(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:gpt-4o")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        get_settings.cache_clear()
+
+        result = _build_model(get_settings())
+
+        assert result == "openai:gpt-4o"
+
+    def test_given_openai_model_with_base_url_when_build_model_then_returns_openai_chat(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:claude-sonnet-4-5")
+        monkeypatch.setenv("OPENAI_API_KEY", "cli-token")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        result = _build_model(get_settings())
+
+        assert isinstance(result, OpenAIChat)
+        assert result.id == "claude-sonnet-4-5"
+        assert str(result.base_url) == "http://localhost:3000/v1"
+
+    def test_given_proxy_without_api_key_when_build_model_then_uses_placeholder(
+        self, monkeypatch
+    ):
+        # Guards: proxy users without a real OpenAI key must not get auth errors
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:any-model")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        result = _build_model(get_settings())
+
+        assert isinstance(result, OpenAIChat)
+        assert result.api_key == _PROXY_PLACEHOLDER_API_KEY
+
+    def test_given_proxy_without_api_key_when_translate_subtitle_then_no_value_error(
+        self, monkeypatch
+    ):
+        # Guards: _ensure_translator_api_key must skip key check when proxy is configured,
+        # otherwise translate_subtitle raises ValueError before _build_model runs.
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:any-model")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        entries = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=2),
+                text="Hello",
+            )
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "1. 你好"
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(subtitle)
+
+            model_arg = mock_agent.call_args.kwargs["model"]
+            assert isinstance(model_arg, OpenAIChat)
+            assert model_arg.api_key == _PROXY_PLACEHOLDER_API_KEY
+
+    def test_given_openai_model_with_proxy_when_translate_subtitle_then_uses_openai_chat(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:claude-sonnet-4-5")
+        monkeypatch.setenv("OPENAI_API_KEY", "cli-token")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        entries = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=2),
+                text="Hello",
+            )
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "1. 你好"
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(subtitle)
+
+            model_arg = mock_agent.call_args.kwargs["model"]
+            assert isinstance(model_arg, OpenAIChat)
+            assert model_arg.id == "claude-sonnet-4-5"

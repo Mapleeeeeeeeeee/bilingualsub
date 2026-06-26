@@ -7,9 +7,12 @@ from dataclasses import dataclass
 
 import structlog
 from agno.agent import Agent
+from agno.models.base import Model
+from agno.models.openai import OpenAIChat
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.utils.config import (
+    Settings,
     get_groq_api_key,
     get_openai_api_key,
     get_settings,
@@ -24,6 +27,8 @@ _MAX_RETRIES = 5
 _PARTIAL_CONTEXT_WINDOW = 2
 _MAX_METADATA_TITLE_CHARS = 200
 _MAX_METADATA_DESC_CHARS = 1200
+_OPENAI_PREFIX = "openai:"
+_PROXY_PLACEHOLDER_API_KEY = "dummy"  # pragma: allowlist secret
 
 
 class TranslationError(Exception):
@@ -47,17 +52,47 @@ class RetranslateEntry:
     translated: str = ""
 
 
-def _ensure_translator_api_key(translator_model: str) -> None:
+def _is_openai_model(model_str: str) -> bool:
+    return model_str.strip().lower().startswith(_OPENAI_PREFIX)
+
+
+def _ensure_translator_api_key(settings: Settings) -> None:
     """Validate API key for managed translator providers.
+
+    Skips the OpenAI key check when a proxy base URL is configured,
+    since proxies supply their own authentication.
 
     Raises:
         ValueError: If required provider key is missing.
     """
-    model_prefix = translator_model.strip().lower()
-    if model_prefix.startswith("groq:"):
+    model_str = settings.translator_model
+    if model_str.strip().lower().startswith("groq:"):
         get_groq_api_key()
-    elif model_prefix.startswith("openai:"):
+    elif _is_openai_model(model_str) and not settings.openai_base_url:
         get_openai_api_key()
+
+
+def _build_model(settings: Settings) -> str | Model:
+    """Build an Agno model instance or model string for the translator.
+
+    When the translator model has an ``openai:`` prefix AND a custom
+    ``OPENAI_BASE_URL`` is configured, constructs an :class:`OpenAIChat` model
+    pointed at the proxy endpoint.  This allows OpenAI-compatible proxies
+    (e.g. CLIProxyAPI) to be used without touching the Agno provider registry.
+
+    In all other cases the raw model string is returned and Agno handles
+    provider resolution itself (existing behaviour).
+    """
+    model_str = settings.translator_model
+    if _is_openai_model(model_str) and settings.openai_base_url:
+        # Slice original to preserve model ID casing
+        model_id = model_str[len(_OPENAI_PREFIX) :]
+        return OpenAIChat(
+            id=model_id,
+            base_url=settings.openai_base_url,
+            api_key=settings.openai_api_key or _PROXY_PLACEHOLDER_API_KEY,
+        )
+    return model_str
 
 
 def _compact_text(text: str) -> str:
@@ -334,9 +369,9 @@ def translate_subtitle(
         ValueError: If provider API key is missing
     """
     settings = get_settings()
-    _ensure_translator_api_key(settings.translator_model)
+    _ensure_translator_api_key(settings)
     translator = Agent(
-        model=settings.translator_model,
+        model=_build_model(settings),
         description=_build_translator_description(
             source_lang=source_lang,
             target_lang=target_lang,
@@ -491,9 +526,9 @@ def retranslate_entries(
         raise ValueError(f"selected_indices not found: {missing}")
 
     settings = get_settings()
-    _ensure_translator_api_key(settings.translator_model)
+    _ensure_translator_api_key(settings)
     translator = Agent(
-        model=settings.translator_model,
+        model=_build_model(settings),
         description=_build_translator_description(
             source_lang=source_lang,
             target_lang=target_lang,

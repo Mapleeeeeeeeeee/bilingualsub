@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     Attributes:
         groq_api_key: API key for Groq services (Whisper + LLM)
         openai_api_key: API key for OpenAI services
+        openai_base_url: Base URL for OpenAI-compatible proxy (e.g. http://localhost:8317/v1)
         transcriber_provider: Whisper provider ("groq" or "openai")
         transcriber_model: Whisper model name
         translator_model: Agno model string (e.g. "ollama:model_id", "groq:model_id")
@@ -20,6 +22,12 @@ class Settings(BaseSettings):
 
     groq_api_key: str = ""
     openai_api_key: str = ""
+    openai_base_url: str = ""
+
+    @field_validator("openai_base_url")
+    @classmethod
+    def strip_trailing_slash(cls, v: str) -> str:
+        return v.rstrip("/") if v else v
 
     transcriber_provider: str = "groq"
     transcriber_model: str = "whisper-large-v3-turbo"
