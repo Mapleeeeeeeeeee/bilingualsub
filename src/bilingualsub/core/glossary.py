@@ -132,20 +132,3 @@ class GlossaryManager:
             "以下是術語表，請嚴格依照此表翻譯對應的專有名詞：\n" + "\n".join(lines)  # noqa: RUF001
         )
         return self._prompt_cache
-
-
-def extract_source_terms(formatted_text: str) -> list[str]:
-    """Extract source terms from formatted glossary prompt text.
-
-    Parses text produced by GlossaryManager.format_for_prompt(),
-    which uses the format "source → target" per line.
-    """
-    if not formatted_text:
-        return []
-    terms: list[str] = []
-    for line in formatted_text.strip().split("\n"):
-        if "→" in line:
-            source = line.split("→")[0].strip()
-            if source:
-                terms.append(source)
-    return terms

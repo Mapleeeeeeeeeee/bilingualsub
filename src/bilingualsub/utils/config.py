@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     @field_validator("openai_base_url")
     @classmethod
     def strip_trailing_slash(cls, v: str) -> str:
-        return v.rstrip("/") if v else v
+        return v.rstrip("/")
 
     transcriber_provider: str = "groq"
     transcriber_model: str = "whisper-large-v3-turbo"

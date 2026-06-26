@@ -778,7 +778,7 @@ class TestBuildModel:
 
         assert isinstance(result, OpenAIChat)
         assert result.id == "claude-sonnet-4-5"
-        assert str(result.base_url) == "http://localhost:3000/v1"
+        assert result.base_url == "http://localhost:3000/v1"
 
     def test_given_proxy_without_api_key_when_build_model_then_uses_placeholder(
         self, monkeypatch
@@ -793,6 +793,19 @@ class TestBuildModel:
 
         assert isinstance(result, OpenAIChat)
         assert result.api_key == _PROXY_PLACEHOLDER_API_KEY
+
+    def test_given_base_url_with_trailing_slash_when_build_model_then_slash_stripped(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:gpt-4o")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1/")
+        get_settings.cache_clear()
+
+        result = _build_model(get_settings())
+
+        assert isinstance(result, OpenAIChat)
+        assert result.base_url == "http://localhost:3000/v1"
 
     def test_given_proxy_without_api_key_when_translate_subtitle_then_no_value_error(
         self, monkeypatch
@@ -821,6 +834,7 @@ class TestBuildModel:
             mock_response.content = "1. 你好"
             mock_translator.run.return_value = mock_response
 
+            # Primary assertion: no ValueError raised — proxy skips API key check
             translate_subtitle(subtitle)
 
             model_arg = mock_agent.call_args.kwargs["model"]

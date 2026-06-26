@@ -20,19 +20,24 @@ class TranscriptionError(Exception):
 
 def build_whisper_prompt(
     video_title: str = "",
-    glossary_terms: list[str] | None = None,
 ) -> str | None:
-    parts: list[str] = []
-    if video_title:
-        parts.append(video_title.strip())
-    if glossary_terms:
-        parts.append(", ".join(glossary_terms))
-    if not parts:
+    """Build a Whisper prompt from video title to improve transcription accuracy.
+
+    Strips whitespace from the title, returns None if empty, and truncates
+    to ``_MAX_WHISPER_PROMPT_CHARS`` when the title exceeds the limit.
+
+    Args:
+        video_title: Raw video title string.
+
+    Returns:
+        Cleaned title string, or None if the title is blank.
+    """
+    title = video_title.strip()
+    if not title:
         return None
-    prompt = ". ".join(parts)
-    if len(prompt) > _MAX_WHISPER_PROMPT_CHARS:
-        return prompt[:_MAX_WHISPER_PROMPT_CHARS]
-    return prompt
+    if len(title) > _MAX_WHISPER_PROMPT_CHARS:
+        return title[:_MAX_WHISPER_PROMPT_CHARS]
+    return title
 
 
 def _transcribe_single(
@@ -84,15 +89,21 @@ def _transcribe_single(
         if not segments:
             raise TranscriptionError("Transcription returned no segments")
 
-        entries = []
-        for i, seg in enumerate(segments, start=1):
-            entry = SubtitleEntry(
+        entries = [
+            SubtitleEntry(
                 index=i,
                 start=timedelta(seconds=seg["start"]),
                 end=timedelta(seconds=seg["end"]),
                 text=seg["text"].strip(),
             )
-            entries.append(entry)
+            for i, seg in enumerate(
+                (s for s in segments if s["start"] < s["end"] and s["text"].strip()),
+                start=1,
+            )
+        ]
+
+        if not entries:
+            raise TranscriptionError("No valid segments after filtering")
 
         return Subtitle(entries=entries)
     except TranscriptionError:

@@ -27,6 +27,7 @@ _MAX_RETRIES = 5
 _PARTIAL_CONTEXT_WINDOW = 2
 _MAX_METADATA_TITLE_CHARS = 200
 _MAX_METADATA_DESC_CHARS = 1200
+_GROQ_PREFIX = "groq:"
 _OPENAI_PREFIX = "openai:"
 _PROXY_PLACEHOLDER_API_KEY = "dummy"  # pragma: allowlist secret
 
@@ -66,7 +67,7 @@ def _ensure_translator_api_key(settings: Settings) -> None:
         ValueError: If required provider key is missing.
     """
     model_str = settings.translator_model
-    if model_str.strip().lower().startswith("groq:"):
+    if model_str.strip().lower().startswith(_GROQ_PREFIX):
         get_groq_api_key()
     elif _is_openai_model(model_str) and not settings.openai_base_url:
         get_openai_api_key()
@@ -81,12 +82,12 @@ def _build_model(settings: Settings) -> str | Model:
     (e.g. CLIProxyAPI) to be used without touching the Agno provider registry.
 
     In all other cases the raw model string is returned and Agno handles
-    provider resolution itself (existing behaviour).
+    provider resolution itself (existing behavior).
     """
     model_str = settings.translator_model
     if _is_openai_model(model_str) and settings.openai_base_url:
-        # Slice original to preserve model ID casing
-        model_id = model_str[len(_OPENAI_PREFIX) :]
+        # _is_openai_model lowercases; slice original to preserve casing
+        model_id = model_str.strip()[len(_OPENAI_PREFIX) :]
         return OpenAIChat(
             id=model_id,
             base_url=settings.openai_base_url,
