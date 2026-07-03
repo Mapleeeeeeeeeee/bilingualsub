@@ -205,10 +205,8 @@ def _parse_retranslate_response(
     response_text: str,
     *,
     expected_index: int,
-    fallback_original: str,
 ) -> RetranslateResult:
     """Parse structured partial re-translation output."""
-    _ = fallback_original
     cleaned = _strip_json_fence(response_text)
     try:
         payload = loads(cleaned)
@@ -766,7 +764,6 @@ def retranslate_entries(
                 results[target_index] = _parse_retranslate_response(
                     response_text,
                     expected_index=target_index,
-                    fallback_original=target_entry.original,
                 )
                 logger.debug(
                     "retranslation_entry_response",

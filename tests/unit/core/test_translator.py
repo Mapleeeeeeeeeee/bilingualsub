@@ -263,7 +263,6 @@ class TestParseRetranslateResponse:
         result = _parse_retranslate_response(
             response,
             expected_index=2,
-            fallback_original="Open eye released GP five",
         )
 
         assert result == RetranslateResult(
@@ -280,7 +279,6 @@ class TestParseRetranslateResponse:
         result = _parse_retranslate_response(
             response,
             expected_index=2,
-            fallback_original="Line 2",
         )
 
         assert result.original == "Line two"
@@ -301,7 +299,6 @@ class TestParseRetranslateResponse:
             _parse_retranslate_response(
                 response,
                 expected_index=2,
-                fallback_original="Line 2",
             )
 
     @pytest.mark.parametrize(
@@ -318,7 +315,6 @@ class TestParseRetranslateResponse:
             _parse_retranslate_response(
                 response,
                 expected_index=2,
-                fallback_original="Line 2",
             )
 
     @pytest.mark.parametrize(
@@ -335,7 +331,6 @@ class TestParseRetranslateResponse:
             _parse_retranslate_response(
                 response,
                 expected_index=2,
-                fallback_original="Line 2",
             )
 
 
