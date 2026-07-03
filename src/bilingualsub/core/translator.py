@@ -4,6 +4,9 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from json import JSONDecodeError, loads
+from typing import Any
+from urllib.parse import urlparse
 
 import structlog
 from agno.agent import Agent
@@ -53,6 +56,15 @@ class RetranslateEntry:
     translated: str = ""
 
 
+@dataclass
+class RetranslateResult:
+    """Structured result from partial re-translation."""
+
+    index: int
+    original: str
+    translated: str
+
+
 def _is_openai_model(model_str: str) -> bool:
     return model_str.strip().lower().startswith(_OPENAI_PREFIX)
 
@@ -94,6 +106,28 @@ def _build_model(settings: Settings) -> str | Model:
             api_key=settings.openai_api_key or _PROXY_PLACEHOLDER_API_KEY,
         )
     return model_str
+
+
+def _model_log_metadata(settings: Settings) -> dict[str, str | None]:
+    """Return safe model metadata for structured logs."""
+    model_str = settings.translator_model.strip()
+    provider_kind = "agno"
+    model_id = model_str
+    lower_model = model_str.lower()
+    if lower_model.startswith(_GROQ_PREFIX):
+        provider_kind = "groq"
+        model_id = model_str[len(_GROQ_PREFIX) :]
+    elif lower_model.startswith(_OPENAI_PREFIX):
+        provider_kind = "openai"
+        model_id = model_str[len(_OPENAI_PREFIX) :]
+
+    parsed_base_url = urlparse(settings.openai_base_url or "")
+    base_url_host = parsed_base_url.hostname if parsed_base_url.hostname else None
+    return {
+        "model_id": model_id,
+        "provider_kind": provider_kind,
+        "base_url_host": base_url_host,
+    }
 
 
 def _compact_text(text: str) -> str:
@@ -155,6 +189,74 @@ def _build_translator_description(
 def _strip_number_prefix(text: str) -> str:
     """Remove optional leading numbering (e.g. '1. ...') from model output."""
     return re.sub(r"^\s*\d+\s*[.):\uff0e]\s*", "", text, count=1)
+
+
+def _strip_json_fence(text: str) -> str:
+    """Remove a Markdown JSON fence if the model wrapped the response."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if len(lines) >= 3 and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return stripped
+
+
+def _extract_retranslate_payload(payload: Any, expected_index: int) -> dict[str, Any]:
+    """Extract one re-translation object from supported JSON response shapes."""
+    if isinstance(payload, dict):
+        if "results" in payload:
+            return _extract_retranslate_payload(payload["results"], expected_index)
+        if str(expected_index) in payload:
+            value = payload[str(expected_index)]
+            if isinstance(value, dict):
+                return {"index": expected_index, **value}
+            return {"index": expected_index, "translated": value}
+        if "original" in payload or "translated" in payload:
+            return payload
+    if isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, dict) and item.get("index") == expected_index:
+                return item
+        if len(payload) == 1 and isinstance(payload[0], dict):
+            return payload[0]
+    raise TranslationError(f"Could not parse re-translation JSON for {expected_index}")
+
+
+def _parse_retranslate_response(
+    response_text: str,
+    *,
+    expected_index: int,
+    fallback_original: str,
+) -> RetranslateResult:
+    """Parse structured partial re-translation output, with plain-text fallback."""
+    cleaned = _strip_json_fence(response_text)
+    try:
+        payload = _extract_retranslate_payload(loads(cleaned), expected_index)
+    except (JSONDecodeError, TranslationError) as err:
+        translated = _strip_number_prefix(response_text).strip()
+        if not translated:
+            raise TranslationError(
+                f"Empty re-translation response for entry {expected_index}"
+            ) from err
+        return RetranslateResult(
+            index=expected_index,
+            original=fallback_original,
+            translated=translated,
+        )
+
+    translated = str(payload.get("translated") or "").strip()
+    original = str(payload.get("original") or fallback_original).strip()
+    index = int(payload.get("index") or expected_index)
+    if index != expected_index:
+        raise TranslationError(
+            f"Expected re-translation index {expected_index}, got {index}"
+        )
+    if not translated:
+        raise TranslationError(
+            f"Empty re-translation response for entry {expected_index}"
+        )
+    return RetranslateResult(index=index, original=original, translated=translated)
 
 
 def _check_rate_limit(response_text: str) -> None:
@@ -267,13 +369,19 @@ def _translate_batch(
     )
 
     logger.debug(
-        "Batch translation prompt (entries %d-%d):\n%s",
-        batch[0].index,
-        batch[-1].index,
-        prompt,
+        "translation_batch_request",
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(batch),
+        batch_start_index=batch[0].index,
+        batch_end_index=batch[-1].index,
+        has_context=bool(context),
+        lookahead_count=len(lookahead or []),
     )
 
+    started_at = time.monotonic()
     response = translator.run(prompt)
+    duration_ms = round((time.monotonic() - started_at) * 1000)
     response_text = response.content.strip() if response.content else ""
     if not response_text:
         raise TranslationError("Empty batch translation response")
@@ -281,10 +389,14 @@ def _translate_batch(
     _check_rate_limit(response_text)
 
     logger.debug(
-        "Batch translation response (entries %d-%d):\n%s",
-        batch[0].index,
-        batch[-1].index,
-        response_text,
+        "translation_batch_response",
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(batch),
+        batch_start_index=batch[0].index,
+        batch_end_index=batch[-1].index,
+        duration_ms=duration_ms,
+        response_chars=len(response_text),
     )
 
     return _parse_batch_response(response_text, len(batch))
@@ -328,10 +440,11 @@ def _translate_one_by_one(
                 f"{entry.index}: {entry.text}"
             )
         logger.debug(
-            "One-by-one translation for entry %d: '%s' -> '%s'",
-            entry.index,
-            entry.text,
-            translated_text,
+            "translation_one_by_one_entry_completed",
+            index=entry.index,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            response_chars=len(translated_text),
         )
         results.append(translated_text)
     return results
@@ -373,6 +486,7 @@ def translate_subtitle(
     """
     settings = get_settings()
     _ensure_translator_api_key(settings)
+    model_metadata = _model_log_metadata(settings)
     translator = Agent(
         model=_build_model(settings),
         description=_build_translator_description(
@@ -386,16 +500,29 @@ def translate_subtitle(
 
     entries = subtitle.entries
     translated_texts: list[str] = []
+    logger.info(
+        "translation_started",
+        **model_metadata,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(entries),
+        batch_size=_BATCH_SIZE,
+    )
+    started_at = time.monotonic()
 
     for i in range(0, len(entries), _BATCH_SIZE):
         batch = entries[i : i + _BATCH_SIZE]
 
         logger.debug(
-            "Processing batch %d/%d (entries %d-%d)",
-            i // _BATCH_SIZE + 1,
-            (len(entries) + _BATCH_SIZE - 1) // _BATCH_SIZE,
-            batch[0].index,
-            batch[-1].index,
+            "translation_batch_started",
+            **model_metadata,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            batch_number=i // _BATCH_SIZE + 1,
+            batch_count=(len(entries) + _BATCH_SIZE - 1) // _BATCH_SIZE,
+            batch_start_index=batch[0].index,
+            batch_end_index=batch[-1].index,
+            entry_count=len(batch),
         )
 
         # Collect context from previously translated entries
@@ -431,16 +558,19 @@ def translate_subtitle(
                 except (TranslationError, Exception) as exc:
                     # Fallback to one-by-one for non-rate-limit errors
                     logger.warning(
-                        "Batch translation failed for entries %d-%d, "
-                        "falling back to one-by-one: %s",
-                        i + 1,
-                        i + len(batch),
-                        exc,
+                        "translation_batch_fallback",
+                        **model_metadata,
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                        batch_start_index=batch[0].index,
+                        batch_end_index=batch[-1].index,
+                        entry_count=len(batch),
+                        error_type=type(exc).__name__,
                     )
                     logger.debug(
-                        "Falling back to one-by-one for entries %d-%d",
-                        i + 1,
-                        i + len(batch),
+                        "translation_one_by_one_fallback_started",
+                        batch_start_index=batch[0].index,
+                        batch_end_index=batch[-1].index,
                     )
                     batch_translations = _translate_one_by_one(
                         translator, batch, source_lang, target_lang
@@ -454,12 +584,13 @@ def translate_subtitle(
             except RateLimitError as exc:
                 if attempt < _MAX_RETRIES:
                     logger.warning(
-                        "Rate limited at entries %d-%d (attempt %d/%d), waiting %.0fs",
-                        batch[0].index,
-                        batch[-1].index,
-                        attempt + 1,
-                        _MAX_RETRIES,
-                        exc.retry_after,
+                        "translation_rate_limited",
+                        **model_metadata,
+                        batch_start_index=batch[0].index,
+                        batch_end_index=batch[-1].index,
+                        attempt=attempt + 1,
+                        max_retries=_MAX_RETRIES,
+                        retry_after_seconds=exc.retry_after,
                     )
                     if on_rate_limit is not None:
                         on_rate_limit(exc.retry_after, attempt + 1, _MAX_RETRIES)
@@ -484,7 +615,59 @@ def translate_subtitle(
         for entry, text in zip(entries, translated_texts, strict=True)
     ]
 
+    logger.info(
+        "translation_completed",
+        **model_metadata,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(entries),
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+    )
+
     return Subtitle(entries=translated_entries)
+
+
+def _build_retranslate_prompt(
+    *,
+    target_entry: RetranslateEntry,
+    prev_entries: list[RetranslateEntry],
+    next_entries: list[RetranslateEntry],
+    normalized_user_context: str,
+    source_lang: str,
+    target_lang: str,
+) -> str:
+    """Build the partial re-translation prompt for one selected entry."""
+    sections: list[str] = []
+    if prev_entries:
+        prev_lines = "\n".join(
+            f"- {entry.original} → {entry.translated or '(待翻譯)'}"
+            for entry in prev_entries
+        )
+        sections.append(f"【上文參考】\n{prev_lines}")
+
+    if next_entries:
+        next_lines = "\n".join(
+            f"- {entry.original} → {entry.translated or '(待翻譯)'}"
+            for entry in next_entries
+        )
+        sections.append(f"【下文參考】\n{next_lines}")
+
+    if normalized_user_context:
+        sections.append(f"【使用者補充上下文】\n{normalized_user_context}")
+
+    prompt_sections = "\n\n".join(sections)
+    instruction = (
+        f"請將以下字幕從{source_lang}翻譯成{target_lang}。\n"
+        "只回傳一個 JSON 物件，不要加 Markdown、引號外文字或任何說明。\n"  # noqa: RUF001
+        '格式：{"index": 數字, "original": "修正後原文", '  # noqa: RUF001
+        '"translated": "目標語言翻譯"}。\n'
+        "若原文專有名詞疑似語音辨識錯字，請依上文、下文、影片背景、術語表與使用者補充上下文修正後翻譯。"  # noqa: RUF001
+        "例如同一影片已出現的品牌、人名、產品名與網域應保持一致。\n\n"
+        f"index: {target_entry.index}\n"
+        f"原文: {target_entry.original}\n"
+        f"目前翻譯（可修正）: {target_entry.translated or '(空)'}"  # noqa: RUF001
+    )
+    return (f"{prompt_sections}\n\n" if prompt_sections else "") + instruction
 
 
 def retranslate_entries(
@@ -497,7 +680,7 @@ def retranslate_entries(
     video_description: str = "",
     glossary_text: str = "",
     user_context: str | None = None,
-) -> dict[int, str]:
+) -> dict[int, RetranslateResult]:
     """Re-translate selected subtitle entries with local context.
 
     Args:
@@ -510,7 +693,8 @@ def retranslate_entries(
         user_context: Optional extra context provided by user.
 
     Returns:
-        Mapping: entry index -> translated text.
+        Mapping: entry index -> structured result containing corrected source and
+            translated text.
 
     Raises:
         ValueError: If request payload is invalid.
@@ -530,6 +714,7 @@ def retranslate_entries(
 
     settings = get_settings()
     _ensure_translator_api_key(settings)
+    model_metadata = _model_log_metadata(settings)
     translator = Agent(
         model=_build_model(settings),
         description=_build_translator_description(
@@ -542,40 +727,41 @@ def retranslate_entries(
     )
 
     normalized_user_context = _compact_text(user_context or "")
-    results: dict[int, str] = {}
+    results: dict[int, RetranslateResult] = {}
+    logger.info(
+        "retranslation_started",
+        **model_metadata,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(entries),
+        selected_indices_count=len(ordered_indices),
+    )
+    retranslation_started_at = time.monotonic()
 
     for target_index in ordered_indices:
+        entry_started_at = time.monotonic()
         position = position_by_index[target_index]
         target_entry = entries[position]
         prev_entries = entries[max(0, position - _PARTIAL_CONTEXT_WINDOW) : position]
         next_entries = entries[position + 1 : position + 1 + _PARTIAL_CONTEXT_WINDOW]
+        prompt = _build_retranslate_prompt(
+            target_entry=target_entry,
+            prev_entries=prev_entries,
+            next_entries=next_entries,
+            normalized_user_context=normalized_user_context,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
 
-        sections: list[str] = []
-        if prev_entries:
-            prev_lines = "\n".join(
-                f"- {entry.original} → {entry.translated or '(待翻譯)'}"
-                for entry in prev_entries
-            )
-            sections.append(f"【上文參考】\n{prev_lines}")
-
-        if next_entries:
-            next_lines = "\n".join(
-                f"- {entry.original} → {entry.translated or '(待翻譯)'}"
-                for entry in next_entries
-            )
-            sections.append(f"【下文參考】\n{next_lines}")
-
-        if normalized_user_context:
-            sections.append(f"【使用者補充上下文】\n{normalized_user_context}")
-
-        prompt_sections = "\n\n".join(sections)
-        prompt = (f"{prompt_sections}\n\n" if prompt_sections else "") + (
-            f"請將以下字幕從{source_lang}翻譯成{target_lang}。\n"
-            "只回傳單行翻譯內容，不要加編號、引號或任何說明。\n"  # noqa: RUF001
-            "若原文專有名詞疑似語音辨識錯字，請依上文、下文、影片背景、術語表與使用者補充上下文修正後翻譯。"  # noqa: RUF001
-            "例如同一影片已出現的品牌、人名、產品名與網域應保持一致。\n\n"
-            f"原文: {target_entry.original}\n"
-            f"目前翻譯（可修正）: {target_entry.translated or '(空)'}"  # noqa: RUF001
+        logger.debug(
+            "retranslation_entry_request",
+            **model_metadata,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            index=target_index,
+            previous_context_count=len(prev_entries),
+            next_context_count=len(next_entries),
+            has_user_context=bool(normalized_user_context),
         )
 
         for attempt in range(_MAX_RETRIES + 1):
@@ -587,22 +773,30 @@ def retranslate_entries(
                         f"Empty re-translation response for entry {target_index}"
                     )
                 _check_rate_limit(response_text)
-                cleaned = _strip_number_prefix(response_text).strip()
-                if not cleaned:
-                    raise TranslationError(
-                        f"Empty re-translation response for entry {target_index}"
-                    )
-                results[target_index] = cleaned
+                results[target_index] = _parse_retranslate_response(
+                    response_text,
+                    expected_index=target_index,
+                    fallback_original=target_entry.original,
+                )
+                logger.debug(
+                    "retranslation_entry_response",
+                    **model_metadata,
+                    source_lang=source_lang,
+                    target_lang=target_lang,
+                    index=target_index,
+                    duration_ms=round((time.monotonic() - entry_started_at) * 1000),
+                    response_chars=len(response_text),
+                )
                 break
             except RateLimitError as exc:
                 if attempt < _MAX_RETRIES:
                     logger.warning(
-                        "Rate limited during re-translation for entry %d "
-                        "(attempt %d/%d), waiting %.0fs",
-                        target_index,
-                        attempt + 1,
-                        _MAX_RETRIES,
-                        exc.retry_after,
+                        "retranslation_rate_limited",
+                        **model_metadata,
+                        index=target_index,
+                        attempt=attempt + 1,
+                        max_retries=_MAX_RETRIES,
+                        retry_after_seconds=exc.retry_after,
                     )
                     time.sleep(exc.retry_after)
                 else:
@@ -612,5 +806,15 @@ def retranslate_entries(
                     ) from exc
         else:
             raise TranslationError(f"Failed to re-translate entry {target_index}")
+
+    logger.info(
+        "retranslation_completed",
+        **model_metadata,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        entry_count=len(entries),
+        selected_indices_count=len(ordered_indices),
+        duration_ms=round((time.monotonic() - retranslation_started_at) * 1000),
+    )
 
     return results

@@ -16,6 +16,7 @@ from bilingualsub.core.transcriber import (
 )
 from bilingualsub.core.translator import (
     RetranslateEntry,
+    RetranslateResult,
     TranslationError,
     retranslate_entries,
     translate_subtitle,
@@ -31,6 +32,7 @@ __all__ = [
     "GlossaryError",
     "GlossaryManager",
     "RetranslateEntry",
+    "RetranslateResult",
     "Subtitle",
     "SubtitleEntry",
     "SubtitleFetchError",

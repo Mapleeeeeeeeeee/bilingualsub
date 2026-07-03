@@ -10,8 +10,10 @@ from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.translator import (
     _PROXY_PLACEHOLDER_API_KEY,
     RetranslateEntry,
+    RetranslateResult,
     TranslationError,
     _parse_batch_response,
+    _parse_retranslate_response,
     retranslate_entries,
     translate_subtitle,
 )
@@ -248,6 +250,54 @@ class TestParseBatchResponse:
         response = "1. 你好\n3. 再見"
         with pytest.raises(TranslationError):
             _parse_batch_response(response, 3)
+
+
+class TestParseRetranslateResponse:
+    def test_parse_retranslate_response_json_object(self):
+        response = (
+            '{"index": 2, "original": "OpenAI released GPT-5", '
+            '"translated": "OpenAI 發布了 GPT-5"}'
+        )
+
+        result = _parse_retranslate_response(
+            response,
+            expected_index=2,
+            fallback_original="Open eye released GP five",
+        )
+
+        assert result == RetranslateResult(
+            index=2,
+            original="OpenAI released GPT-5",
+            translated="OpenAI 發布了 GPT-5",
+        )
+
+    def test_parse_retranslate_response_json_results_list(self):
+        response = (
+            '{"results": [{"index": 2, "original": "Line two", '
+            '"translated": "第二句"}]}'
+        )
+
+        result = _parse_retranslate_response(
+            response,
+            expected_index=2,
+            fallback_original="Line 2",
+        )
+
+        assert result.original == "Line two"
+        assert result.translated == "第二句"
+
+    def test_parse_retranslate_response_plain_text_fallback(self):
+        result = _parse_retranslate_response(
+            "2. 修正版第二句",
+            expected_index=2,
+            fallback_original="Line 2",
+        )
+
+        assert result == RetranslateResult(
+            index=2,
+            original="Line 2",
+            translated="修正版第二句",
+        )
 
 
 class TestBatchTranslation:
@@ -714,7 +764,10 @@ class TestTranslationMetadataAndPartial:
             mock_translator = Mock()
             mock_agent.return_value = mock_translator
             mock_response = Mock()
-            mock_response.content = "修正版第二句"
+            mock_response.content = (
+                '{"index": 2, "original": "Corrected Line 2", '
+                '"translated": "修正版第二句"}'
+            )
             mock_translator.run.return_value = mock_response
 
             result = retranslate_entries(
@@ -723,12 +776,39 @@ class TestTranslationMetadataAndPartial:
                 user_context="主題是太空探索",
             )
 
-            assert result == {2: "修正版第二句"}
+            assert result == {
+                2: RetranslateResult(
+                    index=2,
+                    original="Corrected Line 2",
+                    translated="修正版第二句",
+                )
+            }
             prompt = mock_translator.run.call_args[0][0]
             assert "上文參考" in prompt
             assert "下文參考" in prompt
             assert "主題是太空探索" in prompt
             assert "語音辨識錯字" in prompt
+            assert '"original": "修正後原文"' in prompt
+
+    def test_retranslate_entries_falls_back_to_plain_translation(self):
+        entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "修正版第一句"
+            mock_translator.run.return_value = mock_response
+
+            result = retranslate_entries(entries=entries, selected_indices=[1])
+
+            assert result == {
+                1: RetranslateResult(
+                    index=1,
+                    original="Line 1",
+                    translated="修正版第一句",
+                )
+            }
 
     def test_retranslate_entries_invalid_index_raises_error(self):
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]

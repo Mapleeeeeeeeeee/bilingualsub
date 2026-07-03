@@ -10,6 +10,7 @@ from bilingualsub.api.app import create_app
 from bilingualsub.api.constants import FileType, JobStatus
 from bilingualsub.api.jobs import Job, JobManager
 from bilingualsub.api.routes import _build_download_filename, _sanitize_filename
+from bilingualsub.core import RetranslateResult
 from bilingualsub.core.glossary import GlossaryManager
 
 
@@ -196,7 +197,13 @@ class TestPartialRetranslate:
         job.target_lang = "zh-TW"
 
         with patch("bilingualsub.api.routes.retranslate_entries") as mock_retranslate:
-            mock_retranslate.return_value = {2: "修正版第二句"}
+            mock_retranslate.return_value = {
+                2: RetranslateResult(
+                    index=2,
+                    original="Corrected Line 2",
+                    translated="修正版第二句",
+                )
+            }
             response = await client.post(
                 f"/api/jobs/{job_id}/retranslate",
                 json={
@@ -211,7 +218,13 @@ class TestPartialRetranslate:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["results"] == [{"index": 2, "translated": "修正版第二句"}]
+        assert data["results"] == [
+            {
+                "index": 2,
+                "original": "Corrected Line 2",
+                "translated": "修正版第二句",
+            }
+        ]
         call_kwargs = mock_retranslate.call_args.kwargs
         assert call_kwargs["glossary_text"] == ""  # empty glossary
 

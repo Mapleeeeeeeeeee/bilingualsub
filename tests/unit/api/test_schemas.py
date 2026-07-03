@@ -9,6 +9,7 @@ from bilingualsub.api.schemas import (
     JobCreateRequest,
     JobCreateResponse,
     JobStatusResponse,
+    PartialRetranslateItem,
     PartialRetranslateRequest,
     SSEProgressData,
     StartSubtitleRequest,
@@ -185,3 +186,16 @@ class TestPartialRetranslateRequest:
                     {"index": 1, "original": "Line 1", "translated": "第一句"},
                 ],
             )
+
+    def test_response_item_includes_original(self) -> None:
+        item = PartialRetranslateItem(
+            index=2,
+            original="Corrected Line 2",
+            translated="修正版第二句",
+        )
+
+        assert item.model_dump() == {
+            "index": 2,
+            "original": "Corrected Line 2",
+            "translated": "修正版第二句",
+        }

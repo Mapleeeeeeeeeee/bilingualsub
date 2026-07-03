@@ -377,8 +377,14 @@ async def partial_retranslate(
 
     return PartialRetranslateResponse(
         results=[
-            PartialRetranslateItem(index=index, translated=translated)
-            for index, translated in sorted(results.items())
+            PartialRetranslateItem(
+                index=index,
+                original=(result.original if hasattr(result, "original") else ""),
+                translated=(
+                    result.translated if hasattr(result, "translated") else str(result)
+                ),
+            )
+            for index, result in sorted(results.items())
         ]
     )
 
