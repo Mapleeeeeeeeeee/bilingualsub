@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Copy cli-proxy-api binary from its official image
+COPY --from=eceasy/cli-proxy-api:latest /CLIProxyAPI/CLIProxyAPI /usr/local/bin/cliproxyapi
+
 WORKDIR /app
 
 # Python dependencies
@@ -32,4 +35,7 @@ COPY src/ src/
 
 EXPOSE 7860
 
-CMD ["uv", "run", "uvicorn", "bilingualsub.api.app:app", "--host", "0.0.0.0", "--port", "7860"]
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]
