@@ -27,12 +27,14 @@ docker build -t bilingualsub . && docker run -p 7860:7860 -e GROQ_API_KEY=your_k
 
 然後在瀏覽器開啟 http://localhost:7860。
 
-### 使用 CLIProxyAPI 的 Docker Compose
+### 選用：使用 CLIProxyAPI 的 Docker Compose
 
-如果你想讓翻譯走本機 CLIProxyAPI container，並使用自己的
-Antigravity/Codex/Claude OAuth 登入狀態，使用這個流程。
+這個流程是選用的。只有當你想讓翻譯走本機 CLIProxyAPI container，並使用
+自己的 Antigravity/Codex/Claude OAuth 登入狀態時才需要。上面的單純 Docker
+流程不需要 CLIProxyAPI。
 
-先在 host 安裝 CLIProxyAPI 並登入。OAuth token 會建立在
+對 Antigravity/agy 來說，只要 host 已有 OAuth credentials，CLIProxyAPI 就能
+開箱路由請求。先在 host 安裝 CLIProxyAPI 並登入。OAuth token 會建立在
 `~/.cli-proxy-api`，之後由 compose 掛進 proxy container：
 
 ```bash

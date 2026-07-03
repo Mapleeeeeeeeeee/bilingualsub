@@ -27,13 +27,16 @@ docker build -t bilingualsub . && docker run -p 7860:7860 -e GROQ_API_KEY=your_k
 
 Then open http://localhost:7860 in your browser.
 
-### Docker Compose with CLIProxyAPI
+### Optional: Docker Compose with CLIProxyAPI
 
-Use this path when you want translations to go through a local CLIProxyAPI
-container backed by your own Antigravity/Codex/Claude OAuth login.
+This path is optional. Use it only when you want translations to go through a
+local CLIProxyAPI container backed by your own Antigravity/Codex/Claude OAuth
+login. The regular Docker flow above does not require CLIProxyAPI.
 
-First, install CLIProxyAPI on the host and log in. This creates OAuth token files
-under `~/.cli-proxy-api`, which are mounted read/write into the proxy container:
+For Antigravity/agy, CLIProxyAPI can route requests out of the box once the
+host has OAuth credentials. Install CLIProxyAPI on the host and log in. This
+creates OAuth token files under `~/.cli-proxy-api`, which are mounted read/write
+into the proxy container:
 
 ```bash
 cliproxyapi -antigravity-login
