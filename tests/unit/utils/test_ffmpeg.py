@@ -9,6 +9,7 @@ from bilingualsub.utils.ffmpeg import (
     FFmpegError,
     burn_subtitles,
     extract_audio,
+    extract_video_metadata,
     get_audio_duration,
     split_audio,
     trim_video,
@@ -48,6 +49,7 @@ class TestBurnSubtitles:
                 "height": 1080,
                 "fps": 30.0,
                 "title": "test video",
+                "has_audio": True,
             }
 
             yield {
@@ -804,3 +806,69 @@ class TestSplitAudio:
 
         with pytest.raises(ValueError, match="Audio file does not exist"):
             split_audio(audio_path, output_dir=tmp_path)
+
+
+def _ffprobe_json(
+    streams: list[dict], duration: float = 120.0, title: str = "test"
+) -> str:
+    """Build a minimal ffprobe JSON output."""
+    return json.dumps(
+        {
+            "streams": streams,
+            "format": {"duration": str(duration), "tags": {"title": title}},
+        }
+    )
+
+
+_VIDEO_STREAM = {
+    "codec_type": "video",
+    "width": 1920,
+    "height": 1080,
+    "r_frame_rate": "30/1",
+}
+_AUDIO_STREAM = {"codec_type": "audio", "codec_name": "aac"}
+
+
+@pytest.mark.unit
+class TestExtractVideoMetadata:
+    """Test cases for extract_video_metadata has_audio detection."""
+
+    @patch("bilingualsub.utils.ffmpeg.subprocess.run")
+    def test_has_audio_true_when_audio_stream_present(self, mock_run, tmp_path):
+        """Given video with audio+video streams, has_audio is True."""
+        mock_run.return_value = MagicMock(
+            stdout=_ffprobe_json([_VIDEO_STREAM, _AUDIO_STREAM]),
+        )
+
+        result = extract_video_metadata(tmp_path / "video.mp4")
+
+        assert result["has_audio"] is True
+
+    @patch("bilingualsub.utils.ffmpeg.subprocess.run")
+    def test_has_audio_false_when_no_audio_stream(self, mock_run, tmp_path):
+        """Given video with only video stream, has_audio is False."""
+        mock_run.return_value = MagicMock(
+            stdout=_ffprobe_json([_VIDEO_STREAM]),
+        )
+
+        result = extract_video_metadata(tmp_path / "video.mp4")
+
+        assert result["has_audio"] is False
+
+    @patch("bilingualsub.utils.ffmpeg.subprocess.run")
+    def test_returns_standard_metadata_fields(self, mock_run, tmp_path):
+        """Given a normal video, all standard metadata fields are returned."""
+        mock_run.return_value = MagicMock(
+            stdout=_ffprobe_json(
+                [_VIDEO_STREAM, _AUDIO_STREAM], duration=60.0, title="My Video"
+            ),
+        )
+
+        result = extract_video_metadata(tmp_path / "video.mp4")
+
+        assert result["title"] == "My Video"
+        assert result["duration"] == 60.0
+        assert result["width"] == 1920
+        assert result["height"] == 1080
+        assert result["fps"] == 30.0
+        assert "has_audio" in result
