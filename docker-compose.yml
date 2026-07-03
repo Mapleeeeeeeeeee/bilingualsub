@@ -3,11 +3,11 @@ services:
     image: eceasy/cli-proxy-api:latest
     restart: unless-stopped
     ports:
-      - '${CLIPROXY_PORT:-8317}:8317'
+      - '127.0.0.1:${CLIPROXY_PORT:-8317}:8317'
     volumes:
       - '${CLIPROXY_AUTH_DIR:-${HOME}/.cli-proxy-api}:/root/.cli-proxy-api'
       - './cliproxyapi.conf:/CLIProxyAPI/config.yaml:ro'
-    command: ['-config', '/CLIProxyAPI/config.yaml']
+    command: ['./CLIProxyAPI', '-config', '/CLIProxyAPI/config.yaml']
 
   bilingualsub:
     build: .
@@ -22,6 +22,6 @@ services:
       TRANSCRIBER_MODEL: '${TRANSCRIBER_MODEL:-whisper-large-v3-turbo}'
       TRANSLATOR_MODEL: '${TRANSLATOR_MODEL:-openai:bilingualsub-gemini-flash}'
       OPENAI_BASE_URL: 'http://cli-proxy:8317/v1'
-      OPENAI_API_KEY: '${CLIPROXY_API_KEY:-bilingualsub-local}'
+      OPENAI_API_KEY: 'bilingualsub-local' # pragma: allowlist secret
     depends_on:
       - cli-proxy

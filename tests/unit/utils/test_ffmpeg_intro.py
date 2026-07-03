@@ -239,10 +239,14 @@ class TestGenerateIntro:
         assert vf_value.count("drawtext=") == 12
 
     def test_generate_intro_uses_cjk_font_fallback_for_chinese_text(
-        self, tmp_path: Path, mock_intro_ffmpeg: dict
+        self, tmp_path: Path, mock_intro_ffmpeg: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Chinese intro text should target an installed CJK font, not generic serif."""
         output_path = tmp_path / "intro.mp4"
+        monkeypatch.setattr(
+            "bilingualsub.utils.ffmpeg._FONT_ZH_REGULAR",
+            tmp_path / "missing-noto-sans-tc.ttf",
+        )
 
         generate_intro(
             output_path,

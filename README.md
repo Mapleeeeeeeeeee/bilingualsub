@@ -49,7 +49,6 @@ For the compose setup, use an OpenAI-compatible proxy model:
 
 ```env
 TRANSLATOR_MODEL=openai:bilingualsub-gemini-flash
-CLIPROXY_API_KEY=bilingualsub-local
 # Optional: set only when your auth directory is not ~/.cli-proxy-api
 # CLIPROXY_AUTH_DIR=/absolute/path/to/.cli-proxy-api
 ```
@@ -63,6 +62,8 @@ docker compose up --build
 BilingualSub runs at http://localhost:7860. It talks to CLIProxyAPI through the
 compose network at `http://cli-proxy:8317/v1`, so OAuth tokens are never baked
 into the image or committed to the repository.
+The proxy port is bound to `127.0.0.1` only; the compose stack uses the fixed
+local bearer key `bilingualsub-local` internally.
 
 The default alias maps to Antigravity's `gemini-3.5-flash-low`, which is the
 most consistently discoverable Flash variant in current CLIProxyAPI releases.

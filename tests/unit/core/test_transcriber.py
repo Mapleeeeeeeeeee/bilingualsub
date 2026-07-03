@@ -463,8 +463,9 @@ class TestWhisperPrompt:
         assert result is None
 
     def test_build_whisper_prompt_truncates_long_input(self):
-        long_title = "A" * 900
+        long_title = "".join(str(i % 10) for i in range(900))
         result = build_whisper_prompt(video_title=long_title)
+        assert result == long_title[:800]
         assert len(result) == 800
 
     def test_transcribe_single_passes_prompt_to_api(

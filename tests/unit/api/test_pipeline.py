@@ -106,6 +106,7 @@ class TestRunPipeline:
         translate_call_kwargs = mock_translate.call_args.kwargs
         assert "on_progress" in translate_call_kwargs
         assert callable(translate_call_kwargs["on_progress"])
+        assert mock_transcribe.call_args.kwargs["prompt"] == "Test Video"
 
     @patch("bilingualsub.api.pipeline.download_video")
     async def test_download_error(self, mock_download) -> None:

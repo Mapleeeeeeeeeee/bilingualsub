@@ -27,6 +27,51 @@ docker build -t bilingualsub . && docker run -p 7860:7860 -e GROQ_API_KEY=your_k
 
 然後在瀏覽器開啟 http://localhost:7860。
 
+### 使用 CLIProxyAPI 的 Docker Compose
+
+如果你想讓翻譯走本機 CLIProxyAPI container，並使用自己的
+Antigravity/Codex/Claude OAuth 登入狀態，使用這個流程。
+
+先在 host 安裝 CLIProxyAPI 並登入。OAuth token 會建立在
+`~/.cli-proxy-api`，之後由 compose 掛進 proxy container：
+
+```bash
+cliproxyapi -antigravity-login
+```
+
+從範例建立本機 `.env`，並至少設定 `GROQ_API_KEY`：
+
+```bash
+cp .env.example .env
+```
+
+Compose 模式請使用 OpenAI-compatible proxy model：
+
+```env
+TRANSLATOR_MODEL=openai:bilingualsub-gemini-flash
+# 選填：只有 auth 目錄不是 ~/.cli-proxy-api 時才需要設定
+# CLIPROXY_AUTH_DIR=/absolute/path/to/.cli-proxy-api
+```
+
+啟動兩個服務：
+
+```bash
+docker compose up --build
+```
+
+BilingualSub 會跑在 http://localhost:7860。它會透過 compose network 連到
+`http://cli-proxy:8317/v1`，OAuth token 不會被打包進 image，也不會 commit
+到 repo。proxy 對 host 只綁定 `127.0.0.1`；compose stack 內部固定使用本機
+bearer key `bilingualsub-local`。
+
+預設 alias 對應 Antigravity 的 `gemini-3.5-flash-low`，這是目前 CLIProxyAPI
+版本中較穩定可發現的 Flash 變體。如果你的版本沒有這個 alias，可以列出可用
+模型，並在 `.env` 設定 `TRANSLATOR_MODEL=openai:<model-id>`：
+
+```bash
+curl -H "Authorization: Bearer bilingualsub-local" http://localhost:8317/v1/models
+```
+
 ### 本地開發
 
 **前置需求**：Python 3.11+、FFmpeg、Node.js 18+、pnpm
@@ -56,6 +101,7 @@ cd frontend && pnpm dev
 | `TRANSCRIBER_PROVIDER` | 語音辨識供應商                        | `groq`                     | 否   |
 | `TRANSCRIBER_MODEL`    | 使用的 Whisper 模型                   | `whisper-large-v3-turbo`   | 否   |
 | `TRANSLATOR_MODEL`     | 翻譯用的 LLM 模型                     | `groq:openai/gpt-oss-120b` | 否   |
+| `OPENAI_BASE_URL`      | OpenAI-compatible proxy URL           | -                          | 否   |
 
 ## 架構說明
 
