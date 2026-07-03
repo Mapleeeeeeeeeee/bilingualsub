@@ -2,7 +2,11 @@
 
 import pytest
 
-from bilingualsub.core.glossary import GlossaryEntry, GlossaryError, GlossaryManager
+from bilingualsub.core.glossary import (
+    GlossaryEntry,
+    GlossaryError,
+    GlossaryManager,
+)
 
 
 @pytest.mark.unit

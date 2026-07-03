@@ -19,6 +19,7 @@ _FONT_EN_REGULAR = _ASSETS_DIR / "LINESeedSans_Rg.ttf"
 _FONT_EN_BOLD = _ASSETS_DIR / "LINESeedSans_Bd.ttf"
 _FONT_ZH_REGULAR = _ASSETS_DIR / "NotoSansTC-Regular.ttf"
 _FONT_ZH_BOLD = _ASSETS_DIR / "NotoSansTC-Bold.ttf"
+_FONT_ZH_FALLBACK = "Noto Sans CJK TC"
 
 
 def _font_arg(fontfile: Path, fallback_name: str) -> str:
@@ -590,7 +591,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             "原始影片來自",
-            _font_arg(_FONT_ZH_REGULAR, "serif"),
+            _font_arg(_FONT_ZH_REGULAR, _FONT_ZH_FALLBACK),
             max(1, int(height / 42)),
             "white@0.6",
             x_left,
@@ -636,7 +637,7 @@ def generate_intro(  # noqa: PLR0915
     blocks.append(
         _dt(
             video_title,
-            _font_arg(_FONT_ZH_REGULAR, "serif"),
+            _font_arg(_FONT_ZH_REGULAR, _FONT_ZH_FALLBACK),
             max(1, int(height / 34)),
             "white@0.7",
             x_left,
@@ -673,7 +674,7 @@ def generate_intro(  # noqa: PLR0915
         blocks.append(
             _dt(
                 line,
-                _font_arg(_FONT_ZH_REGULAR, "serif"),
+                _font_arg(_FONT_ZH_REGULAR, _FONT_ZH_FALLBACK),
                 max(1, int(height / 45)),
                 "white@0.45",
                 x_left,
@@ -729,6 +730,10 @@ def generate_intro(  # noqa: PLR0915
         "lavfi",
         "-i",
         f"color=c=black:s={width}x{height}:r={fps}:d={duration}",
+        "-f",
+        "lavfi",
+        "-i",
+        "anullsrc=channel_layout=stereo:sample_rate=48000",
         "-vf",
         vf,
         "-c:v",
@@ -737,7 +742,11 @@ def generate_intro(  # noqa: PLR0915
         "23",
         "-preset",
         "fast",
-        "-an",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-shortest",
         "-progress",
         "pipe:1",
         "-y",

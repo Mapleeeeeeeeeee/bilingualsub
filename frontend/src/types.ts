@@ -68,6 +68,7 @@ export interface PartialRetranslateRequest {
 
 export interface PartialRetranslateResult {
   index: number;
+  original: string;
   translated: string;
 }
 

@@ -9,9 +9,14 @@ from bilingualsub.core.glossary import GlossaryEntry, GlossaryError, GlossaryMan
 from bilingualsub.core.merger import merge_subtitles
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.subtitle_fetcher import SubtitleFetchError, fetch_manual_subtitle
-from bilingualsub.core.transcriber import TranscriptionError, transcribe_audio
+from bilingualsub.core.transcriber import (
+    TranscriptionError,
+    build_whisper_prompt,
+    transcribe_audio,
+)
 from bilingualsub.core.translator import (
     RetranslateEntry,
+    RetranslateResult,
     TranslationError,
     retranslate_entries,
     translate_subtitle,
@@ -27,6 +32,7 @@ __all__ = [
     "GlossaryError",
     "GlossaryManager",
     "RetranslateEntry",
+    "RetranslateResult",
     "Subtitle",
     "SubtitleEntry",
     "SubtitleFetchError",
@@ -34,6 +40,7 @@ __all__ = [
     "TranslationError",
     "VideoMetadata",
     "VisualDescriptionError",
+    "build_whisper_prompt",
     "describe_video",
     "download_video",
     "fetch_manual_subtitle",

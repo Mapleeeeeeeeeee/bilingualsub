@@ -108,6 +108,7 @@ class PartialRetranslateItem(BaseModel):
     """Single re-translated item."""
 
     index: int
+    original: str
     translated: str
 
 

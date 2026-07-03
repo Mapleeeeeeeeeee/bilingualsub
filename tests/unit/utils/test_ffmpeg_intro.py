@@ -238,6 +238,34 @@ class TestGenerateIntro:
         # Exactly 12 drawtext blocks when channel_url is omitted (13 when present)
         assert vf_value.count("drawtext=") == 12
 
+    def test_generate_intro_uses_cjk_font_fallback_for_chinese_text(
+        self, tmp_path: Path, mock_intro_ffmpeg: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Chinese intro text should target an installed CJK font, not generic serif."""
+        output_path = tmp_path / "intro.mp4"
+        monkeypatch.setattr(
+            "bilingualsub.utils.ffmpeg._FONT_ZH_REGULAR",
+            tmp_path / "missing-noto-sans-tc.ttf",
+        )
+
+        generate_intro(
+            output_path,
+            width=1280,
+            height=720,
+            fps=30.0,
+            channel="ClaudeDevs",
+            video_title="ClaudeDevs - Artifacts in Claude Code",
+            video_url="https://x.com/ClaudeDevs/status/2072770790114914317?s=20",
+            channel_url="https://x.com/ClaudeDevs",
+        )
+
+        cmd = _get_popen_cmd(mock_intro_ffmpeg["popen"])
+        vf_idx = cmd.index("-vf")
+        vf_value = cmd[vf_idx + 1]
+
+        assert "font='Noto Sans CJK TC'" in vf_value
+        assert "font='serif'" not in vf_value
+
     def test_when_ffmpeg_fails_then_raises_ffmpeg_error(
         self, tmp_path: Path, mock_intro_ffmpeg: dict
     ) -> None:
@@ -284,6 +312,30 @@ class TestGenerateIntro:
         assert cmd[cv_idx + 1] == "libx264"
         # VideoToolbox must NOT be used for intro
         assert "h264_videotoolbox" not in cmd
+
+    def test_generate_intro_includes_silent_audio_track_for_concat(
+        self, tmp_path: Path, mock_intro_ffmpeg: dict
+    ) -> None:
+        """Intro must include silent AAC audio so concat keeps the main video's audio."""
+        output_path = tmp_path / "intro.mp4"
+
+        generate_intro(
+            output_path,
+            width=1920,
+            height=1080,
+            fps=30.0,
+            channel="Ch",
+            video_title="T",
+            video_url="https://example.com",
+        )
+
+        cmd = _get_popen_cmd(mock_intro_ffmpeg["popen"])
+        assert "anullsrc=channel_layout=stereo:sample_rate=48000" in cmd
+        assert "-an" not in cmd
+        assert "-c:a" in cmd
+        ca_idx = cmd.index("-c:a")
+        assert cmd[ca_idx + 1] == "aac"
+        assert "-shortest" in cmd
 
 
 # ---------------------------------------------------------------------------

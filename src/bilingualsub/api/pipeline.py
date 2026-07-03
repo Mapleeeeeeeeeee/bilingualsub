@@ -30,6 +30,7 @@ from bilingualsub.core import (
     TranslationError,
     VideoMetadata,
     VisualDescriptionError,
+    build_whisper_prompt,
     describe_video,
     download_video,
     merge_subtitles,
@@ -491,8 +492,12 @@ async def run_subtitle(job: Job) -> None:
                 job, JobStatus.TRANSCRIBING, 20.0, "transcribe", "Transcribing audio"
             )
             t0 = time.monotonic()
+            whisper_prompt = build_whisper_prompt(video_title=job.video_title)
             original_sub = await asyncio.to_thread(
-                transcribe_audio, audio_path, language=job.source_lang
+                transcribe_audio,
+                audio_path,
+                language=job.source_lang,
+                prompt=whisper_prompt,
             )
             log.info(
                 "step_done",
