@@ -313,6 +313,30 @@ class TestGenerateIntro:
         # VideoToolbox must NOT be used for intro
         assert "h264_videotoolbox" not in cmd
 
+    def test_generate_intro_includes_silent_audio_track_for_concat(
+        self, tmp_path: Path, mock_intro_ffmpeg: dict
+    ) -> None:
+        """Intro must include silent AAC audio so concat keeps the main video's audio."""
+        output_path = tmp_path / "intro.mp4"
+
+        generate_intro(
+            output_path,
+            width=1920,
+            height=1080,
+            fps=30.0,
+            channel="Ch",
+            video_title="T",
+            video_url="https://example.com",
+        )
+
+        cmd = _get_popen_cmd(mock_intro_ffmpeg["popen"])
+        assert "anullsrc=channel_layout=stereo:sample_rate=48000" in cmd
+        assert "-an" not in cmd
+        assert "-c:a" in cmd
+        ca_idx = cmd.index("-c:a")
+        assert cmd[ca_idx + 1] == "aac"
+        assert "-shortest" in cmd
+
 
 # ---------------------------------------------------------------------------
 # concat_videos
