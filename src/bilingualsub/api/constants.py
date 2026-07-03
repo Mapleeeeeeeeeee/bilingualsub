@@ -25,6 +25,7 @@ class FileType(StrEnum):
     VIDEO = "video"
     AUDIO = "audio"
     SOURCE_VIDEO = "source_video"
+    INTRO_VIDEO = "intro_video"
 
 
 class SSEEvent(StrEnum):

@@ -30,6 +30,7 @@ from bilingualsub.core import (
     TranslationError,
     VideoMetadata,
     VisualDescriptionError,
+    build_whisper_prompt,
     describe_video,
     download_video,
     merge_subtitles,
@@ -41,8 +42,10 @@ from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
 from bilingualsub.utils import (
     FFmpegError,
     burn_subtitles,
+    concat_videos,
     extract_audio,
     extract_video_metadata,
+    generate_intro,
     trim_video,
 )
 
@@ -301,9 +304,20 @@ async def run_download(job: Job) -> None:
         # Save metadata for subtitle phase
         job.video_width = metadata.width
         job.video_height = metadata.height
+        job.video_fps = metadata.fps
         job.video_title = metadata.title
         job.video_description = metadata.description
         job.video_duration = metadata.duration
+        job.video_channel = metadata.channel
+
+        # Only show channel URL for YouTube sources
+        source_url = job.source_url or ""
+        is_youtube_source = "youtube.com" in source_url or "youtu.be" in source_url
+        raw_channel_url = metadata.channel_url
+        job.video_channel_url = (
+            raw_channel_url if (is_youtube_source and raw_channel_url) else ""
+        )
+
         job.output_files[FileType.SOURCE_VIDEO] = video_path
 
         _send_download_complete(job)
@@ -486,8 +500,12 @@ async def run_subtitle(job: Job) -> None:
                 job, JobStatus.TRANSCRIBING, 20.0, "transcribe", "Transcribing audio"
             )
             t0 = time.monotonic()
+            whisper_prompt = build_whisper_prompt(video_title=job.video_title)
             original_sub = await asyncio.to_thread(
-                transcribe_audio, audio_path, language=job.source_lang
+                transcribe_audio,
+                audio_path,
+                language=job.source_lang,
+                prompt=whisper_prompt,
             )
             log.info(
                 "step_done",
@@ -546,6 +564,11 @@ async def run_subtitle(job: Job) -> None:
         )
 
 
+_BURN_PROGRESS_END = 80.0
+_INTRO_PROGRESS_END = 90.0
+_CONCAT_PROGRESS_END = 99.0
+
+
 async def run_burn(job: Job, srt_content: str) -> None:
     """Burn user-edited SRT into the source video."""
     log = logger.bind(job_id=job.id)
@@ -558,11 +581,16 @@ async def run_burn(job: Job, srt_content: str) -> None:
         _send_progress(job, JobStatus.BURNING, 0.0, "burn", "Burning subtitles")
         output_video = work_dir / "output.mp4"
 
+        has_channel = bool(job.video_channel)
+        watermark_text = f"Source: {job.video_channel}" if has_channel else None
+
+        burn_scale = _BURN_PROGRESS_END / 100.0 if has_channel else 1.0
+
         def on_burn_progress(percent: float) -> None:
             _send_progress(
                 job,
                 JobStatus.BURNING,
-                percent,
+                percent * burn_scale,
                 "burn",
                 f"Burning subtitles ({percent:.0f}%)",
             )
@@ -573,7 +601,56 @@ async def run_burn(job: Job, srt_content: str) -> None:
             srt_path,
             output_video,
             on_progress=on_burn_progress,
+            watermark_text=watermark_text,
         )
+
+        if has_channel:
+            intro_path = work_dir / "intro.mp4"
+            try:
+                await asyncio.to_thread(
+                    generate_intro,
+                    intro_path,
+                    width=job.video_width,
+                    height=job.video_height,
+                    fps=job.video_fps if job.video_fps > 0 else 30.0,
+                    channel=job.video_channel,
+                    video_title=job.video_title,
+                    video_url=job.source_url,
+                    channel_url=job.video_channel_url,
+                    on_progress=lambda p: _send_progress(
+                        job,
+                        JobStatus.BURNING,
+                        _BURN_PROGRESS_END
+                        + p * (_INTRO_PROGRESS_END - _BURN_PROGRESS_END) / 100.0,
+                        "intro",
+                        f"Generating intro ({p:.0f}%)",
+                    ),
+                )
+                job.output_files[FileType.INTRO_VIDEO] = intro_path
+            except FFmpegError as exc:
+                log.warning("intro_generation_failed", error=str(exc))
+                # Degrade gracefully: skip intro, use subtitle-only main video
+            else:
+                final_path = work_dir / "final.mp4"
+                try:
+                    await asyncio.to_thread(
+                        concat_videos,
+                        intro_path,
+                        output_video,
+                        final_path,
+                        on_progress=lambda p: _send_progress(
+                            job,
+                            JobStatus.BURNING,
+                            _INTRO_PROGRESS_END
+                            + p * (_CONCAT_PROGRESS_END - _INTRO_PROGRESS_END) / 100.0,
+                            "concat",
+                            f"Combining intro and video ({p:.0f}%)",
+                        ),
+                    )
+                    output_video = final_path
+                except FFmpegError as exc:
+                    log.warning("concat_failed", error=str(exc))
+
         job.output_files[FileType.VIDEO] = output_video
         _send_complete(job)
         log.info("burn_complete", job_id=job.id)

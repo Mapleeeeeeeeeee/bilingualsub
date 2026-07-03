@@ -29,6 +29,8 @@ class VideoMetadata:
     height: int
     fps: float
     description: str = ""
+    channel: str = ""  # channel name; empty for local uploads
+    channel_url: str = ""  # raw channel URL from yt-dlp; empty for local uploads
     has_audio: bool = True
 
     def __post_init__(self) -> None:
@@ -120,6 +122,7 @@ def download_video(
     if isinstance(info_title, str) and info_title.strip():
         metadata.title = info_title.strip()
     metadata.description = _sanitize_description(info_dict.get("description", ""))
+    metadata.channel, metadata.channel_url = _extract_channel_from_info(info_dict)
 
     return metadata
 
@@ -129,6 +132,15 @@ def _sanitize_description(raw: Any) -> str:
     if not isinstance(raw, str):
         return ""
     return raw.strip()
+
+
+def _extract_channel_from_info(info_dict: dict[str, Any]) -> tuple[str, str]:
+    """Extract channel name and URL from a yt-dlp info_dict."""
+    channel_raw = info_dict.get("channel") or info_dict.get("uploader") or ""
+    channel = channel_raw.strip() if isinstance(channel_raw, str) else ""
+    raw_url = info_dict.get("channel_url") or ""
+    channel_url = raw_url.strip() if isinstance(raw_url, str) else ""
+    return channel, channel_url
 
 
 _SUPPORTED_EXTRACTOR_CLASSES: list[type] = [
@@ -290,6 +302,8 @@ def _extract_metadata_from_info_dict(
             fmt.get("acodec", "none") not in ("none", None) for fmt in requested_formats
         )
 
+    channel, channel_url = _extract_channel_from_info(info_dict)
+
     return VideoMetadata(
         title=title,
         duration=float(duration),
@@ -297,6 +311,8 @@ def _extract_metadata_from_info_dict(
         height=int(height),
         fps=float(fps),
         description=_sanitize_description(info_dict.get("description", "")),
+        channel=channel,
+        channel_url=channel_url,
         has_audio=has_audio,
     )
 

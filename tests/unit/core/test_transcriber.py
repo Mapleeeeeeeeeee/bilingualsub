@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from bilingualsub.core.subtitle import Subtitle
-from bilingualsub.core.transcriber import TranscriptionError, transcribe_audio
+from bilingualsub.core.transcriber import (
+    TranscriptionError,
+    build_whisper_prompt,
+    transcribe_audio,
+)
 from bilingualsub.utils.config import get_settings
 
 
@@ -79,7 +83,7 @@ class TestTranscribeAudio:
 
         # Verify transcription API was called
         mock_client.audio.transcriptions.create.assert_called_once()
-        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
         assert call_kwargs["model"] == "whisper-large-v3-turbo"
         assert call_kwargs["response_format"] == "verbose_json"
         assert call_kwargs["language"] == "en"
@@ -115,7 +119,7 @@ class TestTranscribeAudio:
         result = transcribe_audio(audio_path, language="zh")
 
         # Verify language parameter was passed
-        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
         assert call_kwargs["language"] == "zh"
 
         # Verify result
@@ -304,7 +308,7 @@ class TestTranscribeAudio:
             assert result.entries[0].text == "Test"
 
             # Verify correct filename was sent
-            call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+            call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
             assert call_kwargs["file"][0] == f"audio{fmt}"
 
     def test_empty_api_key_raises_error(self, tmp_path, monkeypatch, no_env_file):
@@ -337,7 +341,7 @@ class TestTranscribeAudio:
 
         transcribe_audio(audio_path)
 
-        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
         assert call_kwargs["language"] == "en"
 
     def test_transcribe_with_openai_provider(
@@ -382,7 +386,7 @@ class TestTranscribeAudio:
 
         transcribe_audio(audio_path)
 
-        call_kwargs = mock_client.audio.transcriptions.create.call_args[1]
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
         assert call_kwargs["model"] == "whisper-large-v3"
 
     def test_unknown_provider_raises_error(self, tmp_path, monkeypatch):
@@ -417,3 +421,140 @@ class TestTranscribeAudio:
         mock_split.assert_not_called()
         assert isinstance(result, Subtitle)
         assert len(result.entries) == 2
+
+
+@pytest.mark.unit
+class TestWhisperPrompt:
+    """Test cases for build_whisper_prompt and prompt passthrough in transcription."""
+
+    @pytest.fixture(autouse=True)
+    def clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    @pytest.fixture
+    def mock_groq(self):
+        with patch("bilingualsub.core.transcriber.Groq") as mock:
+            yield mock
+
+    @pytest.fixture
+    def valid_verbose_json_response(self):
+        response = Mock()
+        response.segments = [
+            {"id": 0, "start": 0.0, "end": 2.0, "text": " Hello world"},
+        ]
+        return response
+
+    def test_build_whisper_prompt_with_title_only(self):
+        result = build_whisper_prompt(video_title="My Product Review")
+        assert result == "My Product Review"
+
+    def test_build_whisper_prompt_with_whitespace_title(self):
+        result = build_whisper_prompt(video_title="  My Product Review  ")
+        assert result == "My Product Review"
+
+    def test_build_whisper_prompt_empty(self):
+        result = build_whisper_prompt()
+        assert result is None
+
+    def test_build_whisper_prompt_whitespace_only(self):
+        result = build_whisper_prompt(video_title="   ")
+        assert result is None
+
+    def test_build_whisper_prompt_truncates_long_input(self):
+        long_title = "".join(str(i % 10) for i in range(900))
+        result = build_whisper_prompt(video_title=long_title)
+        assert result == long_title[:800]
+        assert len(result) == 800
+
+    def test_transcribe_single_passes_prompt_to_api(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        transcribe_audio(audio_path, prompt="My Product Review. Claude, GPT")
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
+        assert call_kwargs["prompt"] == "My Product Review. Claude, GPT"
+
+    def test_transcribe_single_omits_prompt_when_none(
+        self, tmp_path, mock_groq, valid_verbose_json_response, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = (
+            valid_verbose_json_response
+        )
+
+        transcribe_audio(audio_path)
+
+        call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
+        assert "prompt" not in call_kwargs
+
+    def test_transcribe_filters_zero_duration_segments(
+        self, tmp_path, mock_groq, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        response = Mock()
+        response.segments = [
+            {"id": 0, "start": 0.0, "end": 2.0, "text": " Valid segment"},
+            {"id": 1, "start": 3.0, "end": 3.0, "text": " Zero duration"},
+            {"id": 2, "start": 5.0, "end": 4.0, "text": " Negative duration"},
+            {"id": 3, "start": 6.0, "end": 6.5, "text": "   "},
+            {"id": 4, "start": 7.0, "end": 9.0, "text": " Another valid"},
+        ]
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = response
+
+        result = transcribe_audio(audio_path)
+
+        assert len(result.entries) == 2
+        assert result.entries[0].text == "Valid segment"
+        assert result.entries[1].text == "Another valid"
+        assert result.entries[0].index == 1
+        assert result.entries[1].index == 2
+
+    def test_transcribe_raises_when_all_segments_filtered(
+        self, tmp_path, mock_groq, monkeypatch
+    ):
+        monkeypatch.setenv("GROQ_API_KEY", "test-api-key")
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        response = Mock()
+        response.segments = [
+            {"id": 0, "start": 1.0, "end": 1.0, "text": " Zero duration"},
+            {"id": 1, "start": 3.0, "end": 2.0, "text": " Negative"},
+            {"id": 2, "start": 5.0, "end": 6.0, "text": "   "},
+        ]
+
+        mock_client = MagicMock()
+        mock_groq.return_value = mock_client
+        mock_client.audio.transcriptions.create.return_value = response
+
+        with pytest.raises(
+            TranscriptionError, match="No valid segments after filtering"
+        ):
+            transcribe_audio(audio_path)

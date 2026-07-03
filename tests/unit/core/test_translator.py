@@ -4,12 +4,17 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import pytest
+from agno.models.openai import OpenAIChat
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.translator import (
+    _PROXY_PLACEHOLDER_API_KEY,
     RetranslateEntry,
+    RetranslateResult,
     TranslationError,
+    _build_model,
     _parse_batch_response,
+    _parse_retranslate_response,
     retranslate_entries,
     translate_subtitle,
 )
@@ -248,6 +253,87 @@ class TestParseBatchResponse:
             _parse_batch_response(response, 3)
 
 
+class TestParseRetranslateResponse:
+    def test_parse_retranslate_response_json_object(self):
+        response = (
+            '{"index": 2, "original": "OpenAI released GPT-5", '
+            '"translated": "OpenAI 發布了 GPT-5"}'
+        )
+
+        result = _parse_retranslate_response(
+            response,
+            expected_index=2,
+        )
+
+        assert result == RetranslateResult(
+            index=2,
+            original="OpenAI released GPT-5",
+            translated="OpenAI 發布了 GPT-5",
+        )
+
+    def test_parse_retranslate_response_markdown_json_fence(self):
+        response = (
+            '```json\n{"index": 2, "original": "Line two", "translated": "第二句"}\n```'
+        )
+
+        result = _parse_retranslate_response(
+            response,
+            expected_index=2,
+        )
+
+        assert result.original == "Line two"
+        assert result.translated == "第二句"
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"results": [{"index": 2, "original": "Line two", "translated": "第二句"}]}',
+            '{"2": {"original": "Line two", "translated": "第二句"}}',
+            '[{"index": 2, "original": "Line two", "translated": "第二句"}]',
+            '"第二句"',
+            "2. 修正版第二句",
+        ],
+    )
+    def test_parse_retranslate_response_rejects_unsupported_shapes(self, response):
+        with pytest.raises(TranslationError):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+            )
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"original": "Line two", "translated": "第二句"}',
+            '{"index": "1.", "original": "Line two", "translated": "第二句"}',
+        ],
+    )
+    def test_parse_retranslate_response_invalid_index_raises_translation_error(
+        self, response
+    ):
+        with pytest.raises(TranslationError, match="Invalid re-translation index"):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+            )
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"index": 2, "translated": "第二句"}',
+            '{"index": 2, "original": "Line two"}',
+        ],
+    )
+    def test_parse_retranslate_response_requires_original_and_translated(
+        self, response
+    ):
+        with pytest.raises(TranslationError):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+            )
+
+
 class TestBatchTranslation:
     """Test batch translation behavior."""
 
@@ -457,7 +543,9 @@ class TestTranslationOverlap:
             assert mock_translator.run.call_count == 2
             second_prompt = mock_translator.run.call_args_list[1][0][0]
             assert "上文參考" in second_prompt
-            # Should contain entries from the end of first batch (last 3)
+            # Should contain entries from the end of first batch (last 5)
+            assert "Line 6" in second_prompt
+            assert "Line 7" in second_prompt
             assert "Line 8" in second_prompt
             assert "Line 9" in second_prompt
             assert "Line 10" in second_prompt
@@ -709,7 +797,10 @@ class TestTranslationMetadataAndPartial:
             mock_translator = Mock()
             mock_agent.return_value = mock_translator
             mock_response = Mock()
-            mock_response.content = "修正版第二句"
+            mock_response.content = (
+                '{"index": 2, "original": "Corrected Line 2", '
+                '"translated": "修正版第二句"}'
+            )
             mock_translator.run.return_value = mock_response
 
             result = retranslate_entries(
@@ -718,13 +809,162 @@ class TestTranslationMetadataAndPartial:
                 user_context="主題是太空探索",
             )
 
-            assert result == {2: "修正版第二句"}
+            assert result == {
+                2: RetranslateResult(
+                    index=2,
+                    original="Corrected Line 2",
+                    translated="修正版第二句",
+                )
+            }
             prompt = mock_translator.run.call_args[0][0]
             assert "上文參考" in prompt
+            assert "Line 1 → 第一句" in prompt
             assert "下文參考" in prompt
+            assert "Line 3 → 第三句" in prompt
             assert "主題是太空探索" in prompt
+            assert "index: 2" in prompt
+            assert "原文: Line 2" in prompt
+            assert "目前翻譯（可修正）: 第二句" in prompt
+
+    def test_retranslate_entries_requires_structured_json_result(self):
+        entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "修正版第一句"
+            mock_translator.run.return_value = mock_response
+
+            with pytest.raises(TranslationError):
+                retranslate_entries(entries=entries, selected_indices=[1])
 
     def test_retranslate_entries_invalid_index_raises_error(self):
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
         with pytest.raises(ValueError, match="selected_indices not found"):
             retranslate_entries(entries=entries, selected_indices=[2])
+
+
+@pytest.mark.unit
+class TestBuildModel:
+    """Test cases for translator model selection behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_settings_cache(self):
+        get_settings.cache_clear()
+        yield
+        get_settings.cache_clear()
+
+    def _translate_one_entry_with_agent_mock(self):
+        entries = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=2),
+                text="Hello",
+            )
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "1. 你好"
+            mock_translator.run.return_value = mock_response
+
+            translate_subtitle(subtitle)
+
+            return mock_agent.call_args.kwargs["model"]
+
+    def test_given_groq_model_when_translate_subtitle_then_uses_raw_model_string(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "groq:openai/gpt-oss-120b")
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        get_settings.cache_clear()
+
+        model_arg = self._translate_one_entry_with_agent_mock()
+
+        assert model_arg == "groq:openai/gpt-oss-120b"
+
+    def test_given_openai_model_without_base_url_when_translate_then_uses_raw_string(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:gpt-4o")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        get_settings.cache_clear()
+
+        model_arg = self._translate_one_entry_with_agent_mock()
+
+        assert model_arg == "openai:gpt-4o"
+
+    def test_given_base_url_with_trailing_slash_when_translate_then_slash_stripped(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:gpt-4o")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1/")
+        get_settings.cache_clear()
+
+        model_arg = _build_model(get_settings())
+
+        assert isinstance(model_arg, OpenAIChat)
+        assert model_arg.base_url == "http://localhost:3000/v1"
+
+    def test_given_proxy_without_api_key_when_translate_subtitle_then_no_value_error(
+        self, monkeypatch
+    ):
+        # Guards: _ensure_translator_api_key must skip key check when proxy is configured,
+        # otherwise translate_subtitle raises ValueError before _build_model runs.
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:any-model")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        entries = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=2),
+                text="Hello",
+            )
+        ]
+        subtitle = Subtitle(entries=entries)
+
+        with patch("bilingualsub.core.translator.Agent") as mock_agent:
+            mock_translator = Mock()
+            mock_agent.return_value = mock_translator
+            mock_response = Mock()
+            mock_response.content = "1. 你好"
+            mock_translator.run.return_value = mock_response
+
+            # Primary assertion: no ValueError raised — proxy skips API key check
+            translate_subtitle(subtitle)
+
+    def test_given_openai_model_with_proxy_when_build_model_then_uses_openai_chat(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:claude-sonnet-4-5")
+        monkeypatch.setenv("OPENAI_API_KEY", "cli-token")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        model_arg = _build_model(get_settings())
+
+        assert isinstance(model_arg, OpenAIChat)
+        assert model_arg.id == "claude-sonnet-4-5"
+
+    def test_given_proxy_without_api_key_when_build_model_then_uses_placeholder_key(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:any-model")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
+
+        model_arg = _build_model(get_settings())
+
+        assert isinstance(model_arg, OpenAIChat)
+        assert model_arg.api_key == _PROXY_PLACEHOLDER_API_KEY

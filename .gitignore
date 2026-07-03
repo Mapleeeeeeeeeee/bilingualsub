@@ -91,6 +91,10 @@ frontend/.vite/
 # Logs
 *.log
 logs/
+cliproxy-logs/
+
+# CLIProxyAPI OAuth tokens
+.cli-proxy-api/
 
 # Temporary
 tmp/
