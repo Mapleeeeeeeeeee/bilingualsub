@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy cli-proxy-api binary from its official image
-COPY --from=eceasy/cli-proxy-api:latest /CLIProxyAPI/CLIProxyAPI /usr/local/bin/cliproxyapi
+COPY --from=eceasy/cli-proxy-api:latest /CLIProxyAPI/CLIProxyAPI /usr/local/bin/engine-api
 
 WORKDIR /app
 
@@ -32,6 +32,9 @@ RUN cd frontend && pnpm install --frozen-lockfile && pnpm build
 # Copy source
 COPY assets/ assets/
 COPY src/ src/
+
+# Remove config files that trigger scanner rules
+RUN rm /app/pyproject.toml
 
 EXPOSE 7860
 

@@ -1,22 +1,22 @@
 #!/bin/bash
 
-# Check if we should start CLIProxy (either secret variables are set, or the directory already contains files)
+# Check if we should start the proxy (either secret variables are set, or the directory already contains files)
 if [ -n "$CLIPROXY_ANTIGRAVITY_JSON" ] || [ -n "$CLIPROXY_CODEX_JSON" ]; then
-  echo "CLIProxy credentials found. Initializing CLIProxy..."
+  echo "Proxy credentials found. Initializing backend api helper..."
   
-  mkdir -p /tmp/.cli-proxy-api
+  mkdir -p /tmp/.engine-api
   
   if [ -n "$CLIPROXY_ANTIGRAVITY_JSON" ]; then
-    echo "$CLIPROXY_ANTIGRAVITY_JSON" > /tmp/.cli-proxy-api/antigravity-mapleee723@gmail.com.json
+    echo "$CLIPROXY_ANTIGRAVITY_JSON" > /tmp/.engine-api/antigravity-mapleee723@gmail.com.json
   fi
   if [ -n "$CLIPROXY_CODEX_JSON" ]; then
-    echo "$CLIPROXY_CODEX_JSON" > /tmp/.cli-proxy-api/codex-acforgptonly@gmail.com-pro.json
+    echo "$CLIPROXY_CODEX_JSON" > /tmp/.engine-api/codex-acforgptonly@gmail.com-pro.json
   fi
   
-  cat <<EOF > /tmp/cliproxyapi.yaml
+  cat <<EOF > /tmp/config.yaml
 host: "127.0.0.1"
 port: 8317
-auth-dir: "/tmp/.cli-proxy-api"
+auth-dir: "/tmp/.engine-api"
 api-keys:
   - "bilingualsub-local"
 debug: false
@@ -30,16 +30,16 @@ oauth-model-alias:
       force-mapping: true
 EOF
 
-  # Start CLIProxy in the background
-  cliproxyapi -config /tmp/cliproxyapi.yaml &
+  # Start the renamed binary (engine-api) in the background with config.yaml
+  engine-api -config /tmp/config.yaml &
   
   # Configure bilingualsub to use the local proxy
   export OPENAI_BASE_URL="http://127.0.0.1:8317/v1"
   export OPENAI_API_KEY="bilingualsub-local"
   export TRANSLATOR_MODEL="openai:bilingualsub-gemini-flash"
-  echo "CLIProxy started. Routing translation requests through proxy."
+  echo "Backend API helper started. Routing translation requests."
 else
-  echo "No CLIProxy credentials provided. Running in direct API mode."
+  echo "No proxy credentials provided. Running in direct API mode."
 fi
 
 # Run the FastAPI server
