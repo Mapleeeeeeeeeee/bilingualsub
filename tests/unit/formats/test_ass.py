@@ -1,11 +1,22 @@
 """Unit tests for ASS serializer."""
 
+import re
 from datetime import timedelta
 
 import pytest
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.formats.ass import serialize_bilingual_ass
+
+
+def _dialogue_position(result: str, style: str) -> tuple[int, int, int]:
+    match = re.search(
+        rf"Dialogue: 0,[^,]+,[^,]+,{style},,0,0,0,,"
+        rf"\{{\\an8\\pos\((\d+),(\d+)\)\\fs(\d+)\\q2\}}",
+        result,
+    )
+    assert match is not None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
 class TestSerializeBilingualASS:
@@ -44,21 +55,22 @@ class TestSerializeBilingualASS:
         assert "PlayResX: 1920" in result
         assert "PlayResY: 1080" in result
 
-        # Check styles with fixed colors and margins
+        # Check styles with fixed colors and dynamic top-anchored layout.
         assert "Style: Translated" in result
         assert "Style: Original" in result
         assert "&H0000FFFF" in result  # Yellow color
         assert "&H00000000" in result  # Black outline
-        assert ",2,0,2,30,30,60," in result  # Translated MarginV=60
-        assert ",2,0,2,30,30,20," in result  # Original MarginV=20
+        assert ",3,0,8,60,60,0," in result  # Translated top-aligned
+        assert ",2,0,8,60,60,0," in result  # Original top-aligned
 
         # Check dialogue lines
         assert (
-            "Dialogue: 0,0:00:01.00,0:00:03.00,Translated,,0,0,0,,你好，世界！"
-            in result
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Translated,,0,0,0,,"
+            "{\\an8\\pos(960,898)\\fs46\\q2}你好，世界！" in result
         )
         assert (
-            "Dialogue: 0,0:00:01.00,0:00:03.00,Original,,0,0,0,,Hello, world!" in result
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Original,,0,0,0,,"
+            "{\\an8\\pos(960,967)\\fs26\\q2}Hello, world!" in result
         )
 
     def test_serialize_multiple_entries(self):
@@ -101,10 +113,12 @@ class TestSerializeBilingualASS:
         )
 
         # Check both dialogue pairs exist
-        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Translated,,0,0,0,,第一" in result
-        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Original,,0,0,0,,First" in result
-        assert "Dialogue: 0,0:00:04.50,0:00:06.50,Translated,,0,0,0,,第二" in result
-        assert "Dialogue: 0,0:00:04.50,0:00:06.50,Original,,0,0,0,,Second" in result
+        assert "Dialogue: 0,0:00:01.00,0:00:03.00,Translated" in result
+        assert "{\\an8\\pos(960,898)\\fs46\\q2}第一" in result
+        assert "{\\an8\\pos(960,967)\\fs26\\q2}First" in result
+        assert "Dialogue: 0,0:00:04.50,0:00:06.50,Translated" in result
+        assert "{\\an8\\pos(960,898)\\fs46\\q2}第二" in result
+        assert "{\\an8\\pos(960,967)\\fs26\\q2}Second" in result
 
     def test_serialize_multiline_text(self):
         """Test serializing entry with multiline text."""
@@ -135,12 +149,12 @@ class TestSerializeBilingualASS:
 
         # Check newlines are converted to \N
         assert (
-            "Dialogue: 0,0:00:01.00,0:00:03.00,Translated,,0,0,0,,第一行\\N第二行"
-            in result
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Translated,,0,0,0,,"
+            "{\\an8\\pos(960,813)\\fs46\\q2}第一行\\N第二行" in result
         )
         assert (
-            "Dialogue: 0,0:00:01.00,0:00:03.00,Original,,0,0,0,,Line one\\NLine two"
-            in result
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Original,,0,0,0,,"
+            "{\\an8\\pos(960,936)\\fs26\\q2}Line one\\NLine two" in result
         )
 
     def test_serialize_with_milliseconds(self):
@@ -171,8 +185,8 @@ class TestSerializeBilingualASS:
         )
 
         # Check centisecond precision (10ms = 1cs, 990ms = 99cs)
-        assert "Dialogue: 0,0:00:00.01,0:00:00.99,Translated,,0,0,0,,短" in result
-        assert "Dialogue: 0,0:00:00.01,0:00:00.99,Original,,0,0,0,,Short" in result
+        assert "{\\an8\\pos(960,898)\\fs46\\q2}短" in result
+        assert "{\\an8\\pos(960,967)\\fs26\\q2}Short" in result
 
     def test_serialize_with_hours(self):
         """Test serializing with hour values."""
@@ -202,10 +216,10 @@ class TestSerializeBilingualASS:
         )
 
         # Check hour format (120ms = 12cs, 450ms = 45cs)
-        assert "Dialogue: 0,1:30:45.12,2:45:30.45,Translated,,0,0,0,,長時間" in result
-        assert (
-            "Dialogue: 0,1:30:45.12,2:45:30.45,Original,,0,0,0,,Long duration" in result
-        )
+        assert "Dialogue: 0,1:30:45.12,2:45:30.45,Translated" in result
+        assert "{\\an8\\pos(960,898)\\fs46\\q2}長時間" in result
+        assert "Dialogue: 0,1:30:45.12,2:45:30.45,Original" in result
+        assert "{\\an8\\pos(960,967)\\fs26\\q2}Long duration" in result
 
     def test_serialize_uses_fixed_playres_regardless_of_input(self):
         """Test that PlayRes is always 1920x1080 regardless of input resolution."""
@@ -281,8 +295,8 @@ class TestSerializeBilingualASS:
                 original, translated, video_width=1920, video_height=1080
             )
 
-    def test_serialize_fixed_outline_width(self):
-        """Test that outline width is fixed at 2."""
+    def test_serialize_uses_translation_first_visual_hierarchy(self):
+        """Translated line should be larger and brighter than the original line."""
         original = Subtitle(
             entries=[
                 SubtitleEntry(
@@ -308,10 +322,16 @@ class TestSerializeBilingualASS:
             original, translated, video_width=1920, video_height=1080
         )
 
-        # Check Outline=2 in both styles (appears before alignment value 2)
-        # Format: ...BorderStyle, Outline, Shadow, Alignment...
-        # Expected: ...1,2,0,2,...
-        assert ",1,2,0,2," in result
+        assert (
+            "Style: Translated,Arial,46,"
+            "&H0000FFFF,&H0000FFFF,&H00000000,&H00000000,"
+            "0,0,0,0,100,100,0,0,1,3,0,8,60,60,0,1"
+        ) in result
+        assert (
+            "Style: Original,Arial,26,"
+            "&H00909090,&H00909090,&H00000000,&H00000000,"
+            "0,0,0,0,100,100,0,0,1,2,0,8,60,60,0,1"
+        ) in result
 
     @pytest.mark.unit
     def test_serialize_over_24_hours_when_given_long_video(self):
@@ -342,13 +362,10 @@ class TestSerializeBilingualASS:
         )
 
         # Check that hours > 24 are handled correctly (500ms = 50cs, 120ms = 12cs)
-        assert (
-            "Dialogue: 0,25:30:15.50,26:45:30.12,Translated,,0,0,0,,超长视频" in result
-        )
-        assert (
-            "Dialogue: 0,25:30:15.50,26:45:30.12,Original,,0,0,0,,Very long video"
-            in result
-        )
+        assert "Dialogue: 0,25:30:15.50,26:45:30.12,Translated" in result
+        assert "{\\an8\\pos(960,898)\\fs46\\q2}超长视频" in result
+        assert "Dialogue: 0,25:30:15.50,26:45:30.12,Original" in result
+        assert "{\\an8\\pos(960,967)\\fs26\\q2}Very long video" in result
 
     @pytest.mark.unit
     def test_serialize_escapes_special_ass_characters(self):
@@ -383,3 +400,101 @@ class TestSerializeBilingualASS:
         assert "\\\\backslash" in result
         assert "\\{覆蓋\\}" in result
         assert "\\\\反斜線" in result
+
+    @pytest.mark.unit
+    def test_serialize_wraps_long_original_below_translated_line(self):
+        """Long original text wraps downward instead of pushing above translation."""
+        original = Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(seconds=1),
+                    end=timedelta(seconds=3),
+                    text=(
+                        "It can be an architecture diagram drawn from the actual "
+                        "codebase, a walkthrough of how a request moves through it, "
+                        "or a dashboard of the data that a session had already pulled."
+                    ),
+                )
+            ]
+        )
+        translated = Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(seconds=1),
+                    end=timedelta(seconds=3),
+                    text="也可以是依實際程式碼產生的架構圖、請求流向說明，或是已抓取資料的儀表板。",
+                )
+            ]
+        )
+
+        result = serialize_bilingual_ass(
+            original, translated, video_width=1920, video_height=1080
+        )
+
+        assert "{\\an8\\pos(960,867)\\fs46\\q2}" in result
+        assert "{\\an8\\pos(960,936)\\fs26\\q2}" in result
+        assert "actual codebase, a walkthrough" in result
+        assert "\\Ndashboard of the data" in result
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("original_text", "expected_original_lines"),
+        [
+            ("A short original line.", 1),
+            (
+                "It can be an architecture diagram drawn from the actual codebase, "
+                "a walkthrough of how a request moves through it, or a dashboard "
+                "of the data that a session had already pulled.",
+                2,
+            ),
+            (
+                "This is a deliberately longer original subtitle used to exercise "
+                "the dynamic bilingual layout when English wraps across three lines "
+                "while the translated line remains readable and visually grouped "
+                "with the original reference text below it, including additional "
+                "details that force another wrap without requiring an unrealistic "
+                "font size or a narrow subtitle region.",
+                3,
+            ),
+        ],
+    )
+    def test_serialize_keeps_multiline_original_below_translation(
+        self, original_text: str, expected_original_lines: int
+    ):
+        """Original text with 1-3 lines stays below the translated subtitle."""
+        original = Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(seconds=1),
+                    end=timedelta(seconds=3),
+                    text=original_text,
+                )
+            ]
+        )
+        translated = Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(seconds=1),
+                    end=timedelta(seconds=3),
+                    text="這是用來驗證雙語字幕動態排版的翻譯文字。",
+                )
+            ]
+        )
+
+        result = serialize_bilingual_ass(
+            original, translated, video_width=1920, video_height=1080
+        )
+
+        _, translated_y, translated_size = _dialogue_position(result, "Translated")
+        _, original_y, original_size = _dialogue_position(result, "Original")
+        original_dialogue = next(
+            line for line in result.splitlines() if ",Original," in line
+        )
+
+        assert original_dialogue.count("\\N") + 1 == expected_original_lines
+        assert original_y > translated_y + translated_size
+        assert original_y + expected_original_lines * original_size <= 1080 - 30
