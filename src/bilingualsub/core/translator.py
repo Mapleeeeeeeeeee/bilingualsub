@@ -21,10 +21,10 @@ from bilingualsub.utils.config import (
 logger = structlog.get_logger()
 
 _BATCH_SIZE = 10
-_CONTEXT_SIZE = 3  # Number of previous entries to include as context
+_CONTEXT_SIZE = 5  # Number of previous entries to include as context
 _LOOKAHEAD_SIZE = 3  # Number of upcoming entries to include as forward context
 _MAX_RETRIES = 5
-_PARTIAL_CONTEXT_WINDOW = 2
+_PARTIAL_CONTEXT_WINDOW = 5
 _MAX_METADATA_TITLE_CHARS = 200
 _MAX_METADATA_DESC_CHARS = 1200
 _GROQ_PREFIX = "groq:"
@@ -259,7 +259,9 @@ def _translate_batch(
     prompt = (
         f"{context_section}"
         f"將以下編號字幕從{source_lang}翻譯成{target_lang}。\n"
-        f"只回傳編號翻譯，每行一條，編號與原文一致。\n\n"  # noqa: RUF001
+        f"只回傳編號翻譯，每行一條，編號與原文一致。\n"  # noqa: RUF001
+        "若原文專有名詞疑似語音辨識錯字，請依上文、下文、影片背景與術語表修正後翻譯。"  # noqa: RUF001
+        "例如同一影片已出現的品牌、人名、產品名與網域應保持一致。\n\n"
         f"{numbered_lines}"
         f"{lookahead_section}"
     )
@@ -569,7 +571,9 @@ def retranslate_entries(
         prompt_sections = "\n\n".join(sections)
         prompt = (f"{prompt_sections}\n\n" if prompt_sections else "") + (
             f"請將以下字幕從{source_lang}翻譯成{target_lang}。\n"
-            "只回傳單行翻譯內容，不要加編號、引號或任何說明。\n\n"  # noqa: RUF001
+            "只回傳單行翻譯內容，不要加編號、引號或任何說明。\n"  # noqa: RUF001
+            "若原文專有名詞疑似語音辨識錯字，請依上文、下文、影片背景、術語表與使用者補充上下文修正後翻譯。"  # noqa: RUF001
+            "例如同一影片已出現的品牌、人名、產品名與網域應保持一致。\n\n"
             f"原文: {target_entry.original}\n"
             f"目前翻譯（可修正）: {target_entry.translated or '(空)'}"  # noqa: RUF001
         )

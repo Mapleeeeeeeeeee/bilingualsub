@@ -460,10 +460,13 @@ class TestTranslationOverlap:
             assert mock_translator.run.call_count == 2
             second_prompt = mock_translator.run.call_args_list[1][0][0]
             assert "上文參考" in second_prompt
-            # Should contain entries from the end of first batch (last 3)
+            # Should contain entries from the end of first batch (last 5)
+            assert "Line 6" in second_prompt
+            assert "Line 7" in second_prompt
             assert "Line 8" in second_prompt
             assert "Line 9" in second_prompt
             assert "Line 10" in second_prompt
+            assert "語音辨識錯字" in second_prompt
 
     @pytest.mark.unit
     def test_context_contains_original_and_translated(self):
@@ -726,6 +729,7 @@ class TestTranslationMetadataAndPartial:
             assert "上文參考" in prompt
             assert "下文參考" in prompt
             assert "主題是太空探索" in prompt
+            assert "語音辨識錯字" in prompt
 
     def test_retranslate_entries_invalid_index_raises_error(self):
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
