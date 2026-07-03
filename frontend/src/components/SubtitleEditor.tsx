@@ -16,9 +16,10 @@ interface SubtitleEditorProps {
 
 interface RetranslatePreviewItem {
   index: number;
-  original: string;
-  before: string;
-  after: string;
+  originalBefore: string;
+  originalAfter: string;
+  translatedBefore: string;
+  translatedAfter: string;
 }
 
 type RetranslateChoice = 'before' | 'after';
@@ -122,6 +123,7 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
     return entries.some(
       (entry, i) =>
         entry.translated !== originalEntries[i].translated ||
+        entry.original !== originalEntries[i].original ||
         entry.startTime !== originalEntries[i].startTime ||
         entry.endTime !== originalEntries[i].endTime
     );
@@ -234,17 +236,19 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
         user_context: retranslateContext.trim() || undefined,
       });
 
-      const translatedMap = new Map(
-        response.results.map(item => [item.index, item.translated] as const)
-      );
+      const resultMap = new Map(response.results.map(item => [item.index, item] as const));
       const previewItems = entries
-        .filter(entry => translatedMap.has(entry.index))
-        .map(entry => ({
-          index: entry.index,
-          original: entry.original,
-          before: entry.translated,
-          after: translatedMap.get(entry.index) ?? entry.translated,
-        }))
+        .filter(entry => resultMap.has(entry.index))
+        .map(entry => {
+          const result = resultMap.get(entry.index);
+          return {
+            index: entry.index,
+            originalBefore: entry.original,
+            originalAfter: result?.original ?? entry.original,
+            translatedBefore: entry.translated,
+            translatedAfter: result?.translated ?? entry.translated,
+          };
+        })
         .sort((a, b) => a.index - b.index);
 
       if (previewItems.length === 0) {
@@ -274,18 +278,22 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
   ]);
 
   const handleApplyRetranslatePreview = useCallback(() => {
-    const translatedMap = new Map(
+    const acceptedMap = new Map(
       retranslatePreview.map(item => {
         const choice = retranslateChoices[item.index] ?? 'after';
-        return [item.index, choice === 'before' ? item.before : item.after] as const;
+        return [
+          item.index,
+          choice === 'before'
+            ? { original: item.originalBefore, translated: item.translatedBefore }
+            : { original: item.originalAfter, translated: item.translatedAfter },
+        ] as const;
       })
     );
     setEntries(prev =>
-      prev.map(entry =>
-        translatedMap.has(entry.index)
-          ? { ...entry, translated: translatedMap.get(entry.index) ?? entry.translated }
-          : entry
-      )
+      prev.map(entry => {
+        const accepted = acceptedMap.get(entry.index);
+        return accepted ? { ...entry, ...accepted } : entry;
+      })
     );
     setSelectedIndices(new Set());
     setRetranslatePreview([]);
@@ -451,7 +459,6 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
                   className="border border-gray-100 rounded-xl p-4"
                 >
                   <p className="text-xs font-mono text-gray-500 mb-2">#{item.index}</p>
-                  {item.original && <p className="text-xs text-gray-400 mb-3">{item.original}</p>}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -465,8 +472,13 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
                       <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
                         {t('editor.retranslateBefore')}
                       </p>
+                      {item.originalBefore !== item.originalAfter && item.originalBefore && (
+                        <p className="text-xs text-gray-400 whitespace-pre-wrap leading-relaxed mb-2">
+                          {item.originalBefore}
+                        </p>
+                      )}
                       <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                        {item.before}
+                        {item.translatedBefore}
                       </p>
                     </button>
                     <button
@@ -481,8 +493,13 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
                       <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1.5">
                         {t('editor.retranslateAfter')}
                       </p>
+                      {item.originalBefore !== item.originalAfter && item.originalAfter && (
+                        <p className="text-xs text-gray-400 whitespace-pre-wrap leading-relaxed mb-2">
+                          {item.originalAfter}
+                        </p>
+                      )}
                       <p className="text-sm text-black whitespace-pre-wrap leading-relaxed">
-                        {item.after}
+                        {item.translatedAfter}
                       </p>
                     </button>
                   </div>
