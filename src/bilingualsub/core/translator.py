@@ -5,7 +5,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from json import JSONDecodeError, loads
-from typing import Any
 from urllib.parse import urlparse
 
 import structlog
@@ -202,56 +201,47 @@ def _strip_json_fence(text: str) -> str:
     return stripped
 
 
-def _extract_retranslate_payload(payload: Any, expected_index: int) -> dict[str, Any]:
-    """Extract one re-translation object from supported JSON response shapes."""
-    if isinstance(payload, dict):
-        if "results" in payload:
-            return _extract_retranslate_payload(payload["results"], expected_index)
-        if str(expected_index) in payload:
-            value = payload[str(expected_index)]
-            if isinstance(value, dict):
-                return {"index": expected_index, **value}
-            return {"index": expected_index, "translated": value}
-        if "original" in payload or "translated" in payload:
-            return payload
-    if isinstance(payload, list):
-        for item in payload:
-            if isinstance(item, dict) and item.get("index") == expected_index:
-                return item
-        if len(payload) == 1 and isinstance(payload[0], dict):
-            return payload[0]
-    raise TranslationError(f"Could not parse re-translation JSON for {expected_index}")
-
-
 def _parse_retranslate_response(
     response_text: str,
     *,
     expected_index: int,
     fallback_original: str,
 ) -> RetranslateResult:
-    """Parse structured partial re-translation output, with plain-text fallback."""
+    """Parse structured partial re-translation output."""
+    _ = fallback_original
     cleaned = _strip_json_fence(response_text)
     try:
-        payload = _extract_retranslate_payload(loads(cleaned), expected_index)
-    except (JSONDecodeError, TranslationError) as err:
-        translated = _strip_number_prefix(response_text).strip()
-        if not translated:
-            raise TranslationError(
-                f"Empty re-translation response for entry {expected_index}"
-            ) from err
-        return RetranslateResult(
-            index=expected_index,
-            original=fallback_original,
-            translated=translated,
+        payload = loads(cleaned)
+    except JSONDecodeError as err:
+        raise TranslationError(
+            f"Could not parse re-translation JSON for entry {expected_index}"
+        ) from err
+
+    if not isinstance(payload, dict):
+        raise TranslationError(
+            f"Expected re-translation JSON object for entry {expected_index}"
         )
 
-    translated = str(payload.get("translated") or "").strip()
-    original = str(payload.get("original") or fallback_original).strip()
-    index = int(payload.get("index") or expected_index)
+    try:
+        index = int(payload["index"])
+    except (KeyError, TypeError, ValueError) as err:
+        raise TranslationError(
+            f"Invalid re-translation index for entry {expected_index}"
+        ) from err
+
     if index != expected_index:
         raise TranslationError(
             f"Expected re-translation index {expected_index}, got {index}"
         )
+
+    original = str(payload.get("original") or "").strip()
+    if not original:
+        raise TranslationError(
+            "Missing original text in re-translation response "
+            f"for entry {expected_index}"
+        )
+
+    translated = str(payload.get("translated") or "").strip()
     if not translated:
         raise TranslationError(
             f"Empty re-translation response for entry {expected_index}"

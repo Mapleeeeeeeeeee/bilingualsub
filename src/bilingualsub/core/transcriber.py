@@ -21,10 +21,7 @@ class TranscriptionError(Exception):
 def build_whisper_prompt(
     video_title: str = "",
 ) -> str | None:
-    """Build a Whisper prompt from video title to improve transcription accuracy.
-
-    Strips whitespace from the title, returns None if empty, and truncates
-    to ``_MAX_WHISPER_PROMPT_CHARS`` when the title exceeds the limit.
+    """Build a concise Whisper hint from the video title.
 
     Args:
         video_title: Raw video title string.

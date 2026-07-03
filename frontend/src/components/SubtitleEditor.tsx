@@ -240,13 +240,13 @@ export function SubtitleEditor({ jobId, onBurn, isBurning }: SubtitleEditorProps
       const previewItems = entries
         .filter(entry => resultMap.has(entry.index))
         .map(entry => {
-          const result = resultMap.get(entry.index);
+          const result = resultMap.get(entry.index)!;
           return {
             index: entry.index,
             originalBefore: entry.original,
-            originalAfter: result?.original ?? entry.original,
+            originalAfter: result.original,
             translatedBefore: entry.translated,
-            translatedAfter: result?.translated ?? entry.translated,
+            translatedAfter: result.translated,
           };
         })
         .sort((a, b) => a.index - b.index);

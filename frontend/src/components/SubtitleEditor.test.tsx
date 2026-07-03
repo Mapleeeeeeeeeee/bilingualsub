@@ -86,28 +86,4 @@ describe('SubtitleEditor partial retranslate preview', () => {
     expect(screen.getByText('correct source')).toBeInTheDocument();
     expect(screen.queryByText('old source')).not.toBeInTheDocument();
   });
-
-  it('keeps the current source text for legacy retranslate results without original', async () => {
-    apiMocks.partialRetranslate.mockResolvedValue({
-      results: [{ index: 1, translated: 'Legacy new translation' }],
-    });
-
-    render(<SubtitleEditor jobId="job-1" onBurn={vi.fn()} isBurning={false} />);
-
-    await screen.findByDisplayValue('Old translation');
-    const retranslateButton = screen.getByRole('button', { name: 'editor.retranslate' });
-    fireEvent.click(screen.getAllByTitle('editor.selectForRetranslate')[0]);
-    await waitFor(() => expect(retranslateButton).toBeEnabled());
-    fireEvent.click(retranslateButton);
-    await screen.findByText('Legacy new translation');
-
-    expect(screen.getAllByText('old source')).toHaveLength(1);
-
-    fireEvent.click(screen.getByText('editor.retranslatePreviewApply'));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Legacy new translation')).toBeInTheDocument();
-    });
-    expect(screen.getByText('old source')).toBeInTheDocument();
-  });
 });

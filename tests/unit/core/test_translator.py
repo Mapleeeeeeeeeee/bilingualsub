@@ -12,6 +12,7 @@ from bilingualsub.core.translator import (
     RetranslateEntry,
     RetranslateResult,
     TranslationError,
+    _build_model,
     _parse_batch_response,
     _parse_retranslate_response,
     retranslate_entries,
@@ -271,10 +272,9 @@ class TestParseRetranslateResponse:
             translated="OpenAI 發布了 GPT-5",
         )
 
-    def test_parse_retranslate_response_json_results_list(self):
+    def test_parse_retranslate_response_markdown_json_fence(self):
         response = (
-            '{"results": [{"index": 2, "original": "Line two", '
-            '"translated": "第二句"}]}'
+            '```json\n{"index": 2, "original": "Line two", "translated": "第二句"}\n```'
         )
 
         result = _parse_retranslate_response(
@@ -286,18 +286,57 @@ class TestParseRetranslateResponse:
         assert result.original == "Line two"
         assert result.translated == "第二句"
 
-    def test_parse_retranslate_response_plain_text_fallback(self):
-        result = _parse_retranslate_response(
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"results": [{"index": 2, "original": "Line two", "translated": "第二句"}]}',
+            '{"2": {"original": "Line two", "translated": "第二句"}}',
+            '[{"index": 2, "original": "Line two", "translated": "第二句"}]',
+            '"第二句"',
             "2. 修正版第二句",
-            expected_index=2,
-            fallback_original="Line 2",
-        )
+        ],
+    )
+    def test_parse_retranslate_response_rejects_unsupported_shapes(self, response):
+        with pytest.raises(TranslationError):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+                fallback_original="Line 2",
+            )
 
-        assert result == RetranslateResult(
-            index=2,
-            original="Line 2",
-            translated="修正版第二句",
-        )
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"original": "Line two", "translated": "第二句"}',
+            '{"index": "1.", "original": "Line two", "translated": "第二句"}',
+        ],
+    )
+    def test_parse_retranslate_response_invalid_index_raises_translation_error(
+        self, response
+    ):
+        with pytest.raises(TranslationError, match="Invalid re-translation index"):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+                fallback_original="Line 2",
+            )
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            '{"index": 2, "translated": "第二句"}',
+            '{"index": 2, "original": "Line two"}',
+        ],
+    )
+    def test_parse_retranslate_response_requires_original_and_translated(
+        self, response
+    ):
+        with pytest.raises(TranslationError):
+            _parse_retranslate_response(
+                response,
+                expected_index=2,
+                fallback_original="Line 2",
+            )
 
 
 class TestBatchTranslation:
@@ -515,7 +554,6 @@ class TestTranslationOverlap:
             assert "Line 8" in second_prompt
             assert "Line 9" in second_prompt
             assert "Line 10" in second_prompt
-            assert "語音辨識錯字" in second_prompt
 
     @pytest.mark.unit
     def test_context_contains_original_and_translated(self):
@@ -785,12 +823,15 @@ class TestTranslationMetadataAndPartial:
             }
             prompt = mock_translator.run.call_args[0][0]
             assert "上文參考" in prompt
+            assert "Line 1 → 第一句" in prompt
             assert "下文參考" in prompt
+            assert "Line 3 → 第三句" in prompt
             assert "主題是太空探索" in prompt
-            assert "語音辨識錯字" in prompt
-            assert '"original": "修正後原文"' in prompt
+            assert "index: 2" in prompt
+            assert "原文: Line 2" in prompt
+            assert "目前翻譯（可修正）: 第二句" in prompt
 
-    def test_retranslate_entries_falls_back_to_plain_translation(self):
+    def test_retranslate_entries_requires_structured_json_result(self):
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
 
         with patch("bilingualsub.core.translator.Agent") as mock_agent:
@@ -800,15 +841,8 @@ class TestTranslationMetadataAndPartial:
             mock_response.content = "修正版第一句"
             mock_translator.run.return_value = mock_response
 
-            result = retranslate_entries(entries=entries, selected_indices=[1])
-
-            assert result == {
-                1: RetranslateResult(
-                    index=1,
-                    original="Line 1",
-                    translated="修正版第一句",
-                )
-            }
+            with pytest.raises(TranslationError):
+                retranslate_entries(entries=entries, selected_indices=[1])
 
     def test_retranslate_entries_invalid_index_raises_error(self):
         entries = [RetranslateEntry(index=1, original="Line 1", translated="第一句")]
@@ -879,7 +913,7 @@ class TestBuildModel:
         monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1/")
         get_settings.cache_clear()
 
-        model_arg = self._translate_one_entry_with_agent_mock()
+        model_arg = _build_model(get_settings())
 
         assert isinstance(model_arg, OpenAIChat)
         assert model_arg.base_url == "http://localhost:3000/v1"
@@ -914,11 +948,7 @@ class TestBuildModel:
             # Primary assertion: no ValueError raised — proxy skips API key check
             translate_subtitle(subtitle)
 
-            model_arg = mock_agent.call_args.kwargs["model"]
-            assert isinstance(model_arg, OpenAIChat)
-            assert model_arg.api_key == _PROXY_PLACEHOLDER_API_KEY
-
-    def test_given_openai_model_with_proxy_when_translate_subtitle_then_uses_openai_chat(
+    def test_given_openai_model_with_proxy_when_build_model_then_uses_openai_chat(
         self, monkeypatch
     ):
         monkeypatch.setenv("TRANSLATOR_MODEL", "openai:claude-sonnet-4-5")
@@ -926,25 +956,20 @@ class TestBuildModel:
         monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
         get_settings.cache_clear()
 
-        entries = [
-            SubtitleEntry(
-                index=1,
-                start=timedelta(seconds=0),
-                end=timedelta(seconds=2),
-                text="Hello",
-            )
-        ]
-        subtitle = Subtitle(entries=entries)
+        model_arg = _build_model(get_settings())
 
-        with patch("bilingualsub.core.translator.Agent") as mock_agent:
-            mock_translator = Mock()
-            mock_agent.return_value = mock_translator
-            mock_response = Mock()
-            mock_response.content = "1. 你好"
-            mock_translator.run.return_value = mock_response
+        assert isinstance(model_arg, OpenAIChat)
+        assert model_arg.id == "claude-sonnet-4-5"
 
-            translate_subtitle(subtitle)
+    def test_given_proxy_without_api_key_when_build_model_then_uses_placeholder_key(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("TRANSLATOR_MODEL", "openai:any-model")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:3000/v1")
+        get_settings.cache_clear()
 
-            model_arg = mock_agent.call_args.kwargs["model"]
-            assert isinstance(model_arg, OpenAIChat)
-            assert model_arg.id == "claude-sonnet-4-5"
+        model_arg = _build_model(get_settings())
+
+        assert isinstance(model_arg, OpenAIChat)
+        assert model_arg.api_key == _PROXY_PLACEHOLDER_API_KEY
