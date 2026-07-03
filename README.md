@@ -27,6 +27,52 @@ docker build -t bilingualsub . && docker run -p 7860:7860 -e GROQ_API_KEY=your_k
 
 Then open http://localhost:7860 in your browser.
 
+### Docker Compose with CLIProxyAPI
+
+Use this path when you want translations to go through a local CLIProxyAPI
+container backed by your own Antigravity/Codex/Claude OAuth login.
+
+First, install CLIProxyAPI on the host and log in. This creates OAuth token files
+under `~/.cli-proxy-api`, which are mounted read/write into the proxy container:
+
+```bash
+cliproxyapi -antigravity-login
+```
+
+Create a local `.env` from the example and set at least `GROQ_API_KEY`:
+
+```bash
+cp .env.example .env
+```
+
+For the compose setup, use an OpenAI-compatible proxy model:
+
+```env
+TRANSLATOR_MODEL=openai:bilingualsub-gemini-flash
+CLIPROXY_API_KEY=bilingualsub-local
+# Optional: set only when your auth directory is not ~/.cli-proxy-api
+# CLIPROXY_AUTH_DIR=/absolute/path/to/.cli-proxy-api
+```
+
+Then start both services:
+
+```bash
+docker compose up --build
+```
+
+BilingualSub runs at http://localhost:7860. It talks to CLIProxyAPI through the
+compose network at `http://cli-proxy:8317/v1`, so OAuth tokens are never baked
+into the image or committed to the repository.
+
+The default alias maps to Antigravity's `gemini-3.5-flash-low`, which is the
+most consistently discoverable Flash variant in current CLIProxyAPI releases.
+If the alias does not exist in your version, list the available proxy models
+and set `TRANSLATOR_MODEL=openai:<model-id>` in `.env`:
+
+```bash
+curl -H "Authorization: Bearer bilingualsub-local" http://localhost:8317/v1/models
+```
+
 ### Local Development
 
 **Prerequisites**: Python 3.11+, FFmpeg, Node.js 18+, pnpm
@@ -56,6 +102,7 @@ Backend runs at http://localhost:8000, frontend at http://localhost:5173.
 | `TRANSCRIBER_PROVIDER` | Transcription provider                         | `groq`                     | No       |
 | `TRANSCRIBER_MODEL`    | Whisper model to use                           | `whisper-large-v3-turbo`   | No       |
 | `TRANSLATOR_MODEL`     | LLM model for translation                      | `groq:openai/gpt-oss-120b` | No       |
+| `OPENAI_BASE_URL`      | OpenAI-compatible proxy URL                    | -                          | No       |
 
 ## Architecture
 

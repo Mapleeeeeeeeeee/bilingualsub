@@ -1,0 +1,27 @@
+services:
+  cli-proxy:
+    image: eceasy/cli-proxy-api:latest
+    restart: unless-stopped
+    ports:
+      - '${CLIPROXY_PORT:-8317}:8317'
+    volumes:
+      - '${CLIPROXY_AUTH_DIR:-${HOME}/.cli-proxy-api}:/root/.cli-proxy-api'
+      - './cliproxyapi.conf:/CLIProxyAPI/config.yaml:ro'
+    command: ['-config', '/CLIProxyAPI/config.yaml']
+
+  bilingualsub:
+    build: .
+    image: bilingualsub:latest
+    restart: unless-stopped
+    ports:
+      - '${BILINGUALSUB_PORT:-7860}:7860'
+    environment:
+      GROQ_API_KEY: '${GROQ_API_KEY:?Set GROQ_API_KEY in .env or your shell}'
+      GEMINI_API_KEY: '${GEMINI_API_KEY:-}'
+      TRANSCRIBER_PROVIDER: '${TRANSCRIBER_PROVIDER:-groq}'
+      TRANSCRIBER_MODEL: '${TRANSCRIBER_MODEL:-whisper-large-v3-turbo}'
+      TRANSLATOR_MODEL: '${TRANSLATOR_MODEL:-openai:bilingualsub-gemini-flash}'
+      OPENAI_BASE_URL: 'http://cli-proxy:8317/v1'
+      OPENAI_API_KEY: '${CLIPROXY_API_KEY:-bilingualsub-local}'
+    depends_on:
+      - cli-proxy
