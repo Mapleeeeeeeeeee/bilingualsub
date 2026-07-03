@@ -1,3 +1,13 @@
+---
+title: BilingualSub
+emoji: 🎥
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # BilingualSub
 
 [English](README.md) | [繁體中文](README.zh-TW.md)
