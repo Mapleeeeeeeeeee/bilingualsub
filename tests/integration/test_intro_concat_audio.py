@@ -152,18 +152,38 @@ class VolumeDetectResult(NamedTuple):
 def _run_volumedetect(
     path: Path, *, start_time: float = 0.0, duration: float | None = None
 ) -> VolumeDetectResult:
-    """Decode `path` (or the segment [`start_time`, `start_time + duration`)) end to end.
+    """Decode `path`'s audio stream (or the segment [`start_time`,
+    `start_time + duration`)) end to end.
 
     Uses `-af volumedetect -f null -` to force full decoding without writing
     output, so decoder errors surface in stderr and loudness stats let us
     assert the audio isn't silent/corrupted. `duration`, when given, bounds
     the decode window with `-t` so callers can isolate e.g. just the intro's
     own segment instead of decoding to end-of-file.
+
+    `-map 0:a` explicitly selects only the audio stream. concat_videos()'s
+    output always has video + audio muxed together; without an explicit map,
+    `-t` (used here as an output-duration limiter, since it's positioned
+    after `-i` with a single input) is resolved against *all* muxed output
+    streams. FFmpeg 6.1.1 (Ubuntu 24.04, the CI runner's apt package) and
+    8.1.2 (this repo's macOS dev baseline) disagree on how that limiter
+    interacts with a video stream sharing the output: measured on identical
+    inputs (1.0s intro + 3.0s 44.1kHz main video), an unmapped `-t 0.9`
+    decodes 90112 audio samples (938.7ms, matching a `-map 0:a`-scoped decode
+    on *both* ffmpeg versions) on 8.1.2, but 102400 samples (1066.7ms) on
+    6.1.1 — 6144 samples/channel (128ms) past the intended cutoff, far enough
+    to pull real signal from the main video's audio into what should be an
+    intro-only window and produce a false "intro segment is audible" failure.
+    `silencedetect` on the `-map 0:a`-scoped stream (no `-t` at all) confirms
+    the actual audio content is identical between versions (silence_end at
+    0.997646s on both) — the mismatch is entirely in how `-t` resolves
+    against unmapped multi-stream output, not in concat_videos()'s audio
+    boundary. Scoping to `-map 0:a` removes that version-dependent confound.
     """
     cmd = ["ffmpeg"]
     if start_time > 0:
         cmd += ["-ss", str(start_time)]
-    cmd += ["-i", str(path)]
+    cmd += ["-i", str(path), "-map", "0:a"]
     if duration is not None:
         cmd += ["-t", str(duration)]
     cmd += ["-af", "volumedetect", "-f", "null", "-"]
