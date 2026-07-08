@@ -5,9 +5,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from bilingualsub.core.subtitle import Subtitle
+from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.transcriber import (
     TranscriptionError,
+    _split_long_entries,
     build_whisper_prompt,
     transcribe_audio,
 )
@@ -558,3 +559,82 @@ class TestWhisperPrompt:
             TranscriptionError, match="No valid segments after filtering"
         ):
             transcribe_audio(audio_path)
+
+
+@pytest.mark.unit
+class TestSplitLongEntries:
+    """Test cases for _split_long_entries function."""
+
+    def test_no_split_needed_for_short_entries(self):
+        entry = SubtitleEntry(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=4),
+            text="Hello world",
+        )
+        res = _split_long_entries([entry])
+        assert len(res) == 1
+        assert res[0].text == "Hello world"
+        assert res[0].start == timedelta(seconds=0)
+        assert res[0].end == timedelta(seconds=4)
+
+    def test_splits_long_entry_by_sentence(self):
+        # Duration 10 seconds, text has 3 sentences
+        entry = SubtitleEntry(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=10),
+            text="First sentence. Second sentence! Third sentence?",
+        )
+        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        assert len(res) == 3
+        assert res[0].text == "First sentence."
+        assert res[1].text == "Second sentence!"
+        assert res[2].text == "Third sentence?"
+        assert res[0].start == timedelta(seconds=0)
+        assert res[0].end == res[1].start
+        assert res[1].end == res[2].start
+        assert res[2].end == timedelta(seconds=10)
+
+    def test_splits_long_entry_by_comma_if_no_sentence(self):
+        # Duration 10 seconds, text has commas but no sentence endings
+        entry = SubtitleEntry(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=10),
+            text="This is first clause, and this is second clause, plus third clause",
+        )
+        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        assert len(res) == 3
+        assert res[0].text == "This is first clause,"
+        assert res[1].text == "and this is second clause,"
+        assert res[2].text == "plus third clause"
+
+    def test_splits_long_entry_by_word_if_no_punctuation(self):
+        # Duration 10 seconds, text has no punctuation at all and is long
+        entry = SubtitleEntry(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=10),
+            text="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15",
+        )
+        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        assert len(res) == 2
+        assert (
+            res[0].text
+            == "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10"
+        )
+        assert res[1].text == "word11 word12 word13 word14 word15"
+
+    def test_splits_long_entry_by_chars_for_cjk(self):
+        # Duration 10 seconds, CJK text with no punctuation
+        entry = SubtitleEntry(
+            index=1,
+            start=timedelta(seconds=0),
+            end=timedelta(seconds=10),
+            text="一二三四五六七八九十一二三四五六七八九十",
+        )
+        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=15)
+        assert len(res) == 2
+        assert res[0].text == "一二三四五六七八九十一二三四五"
+        assert res[1].text == "六七八九十"
