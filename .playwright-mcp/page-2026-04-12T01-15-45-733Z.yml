@@ -1,0 +1,9 @@
+- generic [ref=e3]:
+    - banner [ref=e4]:
+        - button "EN" [ref=e5]
+    - main [ref=e6]:
+        - generic [ref=e58]:
+            - generic [ref=e59]:
+                - heading "影片處理中" [level=2] [ref=e60]
+                - paragraph [ref=e61]: 請稍候，我們正在產生字幕。
+            - generic [ref=e66]: 語音辨識中...

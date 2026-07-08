@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+    - banner [ref=e4]:
+        - button "EN" [ref=e5]
+    - main [ref=e6]:
+        - generic [ref=e7]:
+            - generic [ref=e8]:
+                - heading "BilingualSub" [level=1] [ref=e9]
+                - paragraph [ref=e10]: YouTube 雙語字幕自動生成工具
+            - generic [ref=e11]:
+                - generic [ref=e12]:
+                    - button "YouTube 網址" [ref=e13]
+                    - button "上傳檔案" [ref=e14]
+                - textbox "貼上 YouTube 網址..." [ref=e16]
+                - generic [ref=e18]:
+                    - generic [ref=e19]: 時間範圍
+                    - button "設定範圍" [ref=e20]
+                - button "開始處理" [ref=e22]

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>特色字體推薦</title>
+<style>
+  /* Google Fonts */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Serif:wght@300;400;500&display=swap');
+
+  /* LINE Seed */
+  @font-face {
+    font-family: 'LINE Seed Sans';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedSans_W_Rg.woff2') format('woff2');
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: 'LINE Seed Sans';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedSans_W_Bd.woff2') format('woff2');
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: 'LINE Seed Sans';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedSans_W_XBd.woff2') format('woff2');
+    font-weight: 800;
+  }
+  @font-face {
+    font-family: 'LINE Seed Sans';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedSans_W_Th.woff2') format('woff2');
+    font-weight: 300;
+  }
+
+  /* LINE Seed JP (has better CJK coverage than the W version) */
+  @font-face {
+    font-family: 'LINE Seed JP';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedJP_OTF_Rg.woff2') format('woff2');
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: 'LINE Seed JP';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedJP_OTF_Bd.woff2') format('woff2');
+    font-weight: 700;
+  }
+  @font-face {
+    font-family: 'LINE Seed JP';
+    src: url('https://cdn-resource.line-scdn.net/designsystem/v4/LINESeedJP_OTF_Th.woff2') format('woff2');
+    font-weight: 300;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+  }
+  h2 {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #555;
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .note {
+    font-size: 13px;
+    color: #555;
+    text-align: center;
+    line-height: 1.7;
+    max-width: 700px;
+  }
+  .rec {
+    font-size: 12px;
+    color: #00C300;
+    letter-spacing: 1px;
+  }
+  .rec-blue {
+    font-size: 12px;
+    color: #4285F4;
+    letter-spacing: 1px;
+  }
+  .rec-gold {
+    font-size: 12px;
+    color: #c8a44e;
+    letter-spacing: 1px;
+  }
+
+  .intro-frame {
+    width: 960px;
+    height: 540px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 60px rgba(0,0,0,0.6);
+    padding: 0 10%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 4px;
+  }
+  .label-zh {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 10px;
+  }
+  .channel {
+    font-size: 32px;
+    font-weight: 700;
+    color: rgba(255,255,255,1);
+    margin-bottom: 4px;
+  }
+  .ch-url {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 16px;
+  }
+  .title {
+    font-size: 16px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .vid-url {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 20px;
+  }
+  .decl-zh {
+    font-size: 12px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.45);
+    line-height: 2;
+  }
+  .decl-en {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    line-height: 2;
+    margin-top: 8px;
+  }
+  .brand {
+    position: absolute;
+    bottom: 28px;
+    right: 36px;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.25);
+  }
+
+  /* LINE Seed 全套 */
+  .combo-line * { font-family: 'LINE Seed Sans', 'LINE Seed JP', sans-serif !important; }
+  .combo-line .channel { font-weight: 800; }
+  .combo-line .label-zh, .combo-line .title, .combo-line .decl-zh { font-family: 'LINE Seed JP', 'LINE Seed Sans', sans-serif !important; }
+
+  /* LINE Seed + Noto Sans TC */
+  .combo-line-noto .eyebrow, .combo-line-noto .channel, .combo-line-noto .ch-url, .combo-line-noto .vid-url, .combo-line-noto .decl-en, .combo-line-noto .brand { font-family: 'LINE Seed Sans', sans-serif; }
+  .combo-line-noto .channel { font-weight: 800; }
+  .combo-line-noto .label-zh, .combo-line-noto .title, .combo-line-noto .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+
+  /* LINE Seed + Noto Serif TC */
+  .combo-line-serif .eyebrow, .combo-line-serif .channel, .combo-line-serif .ch-url, .combo-line-serif .vid-url, .combo-line-serif .decl-en, .combo-line-serif .brand { font-family: 'LINE Seed Sans', sans-serif; }
+  .combo-line-serif .channel { font-weight: 800; }
+  .combo-line-serif .label-zh, .combo-line-serif .title, .combo-line-serif .decl-zh { font-family: 'Noto Serif TC', serif; }
+
+  /* IBM Plex Sans + Noto Sans TC */
+  .combo-ibm .eyebrow, .combo-ibm .channel, .combo-ibm .ch-url, .combo-ibm .vid-url, .combo-ibm .decl-en, .combo-ibm .brand { font-family: 'IBM Plex Sans', sans-serif; }
+  .combo-ibm .channel { font-weight: 600; }
+  .combo-ibm .label-zh, .combo-ibm .title, .combo-ibm .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+
+  /* IBM Plex Serif + Noto Serif TC */
+  .combo-ibm-serif .eyebrow, .combo-ibm-serif .ch-url, .combo-ibm-serif .vid-url, .combo-ibm-serif .decl-en, .combo-ibm-serif .brand { font-family: 'IBM Plex Sans', sans-serif; }
+  .combo-ibm-serif .channel { font-family: 'IBM Plex Serif', serif; font-weight: 500; }
+  .combo-ibm-serif .label-zh, .combo-ibm-serif .title, .combo-ibm-serif .decl-zh { font-family: 'Noto Serif TC', serif; }
+
+  /* Inter + Noto Sans TC (reference) */
+  .combo-ref .eyebrow, .combo-ref .channel, .combo-ref .ch-url, .combo-ref .vid-url, .combo-ref .decl-en, .combo-ref .brand { font-family: 'Inter', sans-serif; }
+  .combo-ref .channel { font-weight: 500; }
+  .combo-ref .label-zh, .combo-ref .title, .combo-ref .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- Reference: Inter + Noto Sans TC -->
+<div class="section">
+  <h2>參考 / Inter + Noto Sans TC（上次推薦）</h2>
+  <div class="intro-frame combo-ref">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+</div>
+
+<!-- LINE Seed 全套 -->
+<div class="section">
+  <h2>1 / LINE Seed 全套</h2>
+  <span class="rec">LINE 官方字體 — 免費商用，圓潤友善</span>
+  <div class="intro-frame combo-line">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">LINE Seed Sans（英文）+ LINE Seed JP（日文/CJK）<br>LINE 官方設計，字形圓潤溫暖。免費商用。中文覆蓋需用 JP 版（涵蓋繁中常用字）。</p>
+</div>
+
+<!-- LINE Seed + Noto Sans TC -->
+<div class="section">
+  <h2>2 / LINE Seed + Noto Sans TC</h2>
+  <span class="rec">推薦 — LINE 英文的親和感 + Noto 中文的完整性</span>
+  <div class="intro-frame combo-line-noto">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">英文用 LINE Seed 的圓潤感，中文用 Noto Sans TC 確保繁中完整覆蓋。<br>兩者都是無襯線，風格協調。</p>
+</div>
+
+<!-- LINE Seed + Noto Serif TC -->
+<div class="section">
+  <h2>3 / LINE Seed + Noto Serif TC</h2>
+  <div class="intro-frame combo-line-serif">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">LINE Seed 英文 + Noto Serif TC 襯線中文。圓潤英文 + 正式中文的反差。</p>
+</div>
+
+<!-- IBM Plex Sans + Noto Sans TC -->
+<div class="section">
+  <h2>4 / IBM Plex Sans + Noto Sans TC</h2>
+  <span class="rec-blue">IBM 開源字體 — 專業、清晰、技術感</span>
+  <div class="intro-frame combo-ibm">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">IBM Plex Sans — IBM 的開源字體家族，專業感強，適合技術內容。<br>筆畫清晰方正，辨識度高。</p>
+</div>
+
+<!-- IBM Plex Serif (channel) + Noto Serif TC -->
+<div class="section">
+  <h2>5 / IBM Plex Serif (頻道名) + Noto Serif TC</h2>
+  <div class="intro-frame combo-ibm-serif">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">頻道名用 IBM Plex Serif（襯線，莊重），其餘英文用 IBM Plex Sans，中文 Noto Serif TC。<br>全襯線路線，最有出版物/文件的正式感。</p>
+</div>
+
+<div class="section">
+  <h2>字體比較</h2>
+  <p class="note" style="max-width:800px">
+    <strong>LINE Seed</strong> — LINE 官方字體，免費商用，字形圓潤友善。英文字重齊全（Thin~ExtraBold），CJK 用 JP 版。~2MB<br><br>
+    <strong>IBM Plex</strong> — IBM 開源字體，專業清晰。Sans/Serif/Mono 全家族。Google Fonts 有收錄。~300KB<br><br>
+    <strong>Inter</strong> — 專為螢幕設計的無襯線體，最受歡迎的 UI 字體之一。~300KB<br><br>
+    <strong>Noto Sans/Serif TC</strong> — Google 的繁中字體，覆蓋最完整。Docker 已安裝。~8MB<br><br>
+    所有字體都是開源免費，可以 bundle 到專案。
+  </p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "source": "Agent",
+      "target": "Agent"
+    },
+    {
+      "source": "Claude Code",
+      "target": "Claude Code"
+    }
+  ]
+}

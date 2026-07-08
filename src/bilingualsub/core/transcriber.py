@@ -110,17 +110,74 @@ def _transcribe_single(
         raise TranscriptionError(f"Failed to parse transcription result: {e}") from e
 
 
+def _is_short_text(text: str, min_words: int, min_cjk_chars: int) -> bool:
+    """Check if the text segment is too short."""
+    has_cjk = any(
+        "\u3400" <= c <= "\u4dbf"
+        or "\u4e00" <= c <= "\u9fff"
+        or "\uf900" <= c <= "\ufaff"
+        for c in text
+    )
+    if has_cjk:
+        return len(text) < min_cjk_chars
+    return len(text.split()) < min_words
+
+
+def _split_long_part_by_length(
+    part: str,
+    max_chars: int,
+    min_words: int,
+    min_cjk_chars: int,
+) -> list[str]:
+    """Force-split a long text part into length-restricted chunks."""
+    has_cjk = any(
+        "\u3400" <= c <= "\u4dbf"
+        or "\u4e00" <= c <= "\u9fff"
+        or "\uf900" <= c <= "\ufaff"
+        for c in part
+    )
+    if has_cjk:
+        chunk_size = max_chars
+        chunks = [part[i : i + chunk_size] for i in range(0, len(part), chunk_size)]
+        if len(chunks) > 1 and _is_short_text(chunks[-1], min_words, min_cjk_chars):
+            merged_len = len(chunks[-2]) + len(chunks[-1])
+            if merged_len <= max_chars:
+                chunks[-2] = chunks[-2] + chunks[-1]
+                chunks.pop()
+        return chunks
+
+    words = part.split()
+    chunk_size = max(1, max_chars // 6)
+    word_chunks = []
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i : i + chunk_size])
+        if chunk:
+            word_chunks.append(chunk)
+    if len(word_chunks) > 1 and _is_short_text(
+        word_chunks[-1], min_words, min_cjk_chars
+    ):
+        merged_len = len(word_chunks[-2]) + len(word_chunks[-1]) + 1
+        if merged_len <= max_chars:
+            word_chunks[-2] = f"{word_chunks[-2]} {word_chunks[-1]}"
+            word_chunks.pop()
+    return word_chunks
+
+
 def _split_long_entries(
     entries: list[SubtitleEntry],
     max_duration_sec: float = 6.0,
     max_chars: int = 80,
+    min_words: int = 4,
+    min_cjk_chars: int = 6,
 ) -> list[SubtitleEntry]:
     """Split long subtitle entries.
 
-    Splits based on duration, character count, and CJK boundaries.
+    Splits based on duration, character count, and CJK boundaries,
+    ensuring split parts are not too short.
     """
     new_entries = []
     current_index = 1
+
     for entry in entries:
         duration = (entry.end - entry.start).total_seconds()
         if duration <= max_duration_sec and len(entry.text) <= max_chars:
@@ -135,48 +192,48 @@ def _split_long_entries(
             current_index += 1
             continue
 
-        # Split by sentence endings first
-        raw_parts = re.split(r"(?<=[.?!])\s+", entry.text)
+        # Split by punctuation first (sentences and clauses)
+        raw_parts = re.split(r"(?<=[.?!,;\uff0c\uff1b])\s*", entry.text)
         parts = [p.strip() for p in raw_parts if p.strip()]
 
-        refined_parts = []
+        # Merge adjacent parts that are too short,
+        # but only if the merged part is <= max_duration_sec
+        merged_parts: list[str] = []
         for part in parts:
+            if not merged_parts:
+                merged_parts.append(part)
+                continue
+
+            part_duration = duration * (len(part) / len(entry.text))
+            last_duration = duration * (len(merged_parts[-1]) / len(entry.text))
+
+            if (
+                _is_short_text(part, min_words, min_cjk_chars)
+                or _is_short_text(merged_parts[-1], min_words, min_cjk_chars)
+            ) and (part_duration + last_duration <= max_duration_sec):
+                last_part = merged_parts[-1]
+                has_cjk = any(
+                    "\u3400" <= c <= "\u4dbf"
+                    or "\u4e00" <= c <= "\u9fff"
+                    or "\uf900" <= c <= "\ufaff"
+                    for c in last_part + part
+                )
+                if has_cjk:
+                    merged_parts[-1] = f"{last_part}{part}"
+                else:
+                    merged_parts[-1] = f"{last_part} {part}"
+            else:
+                merged_parts.append(part)
+
+        # Split remaining long parts by length chunks
+        refined_parts = []
+        for part in merged_parts:
             part_duration = duration * (len(part) / len(entry.text))
             if part_duration > max_duration_sec or len(part) > max_chars:
-                # Split by clause boundaries (commas and semicolons)
-                # \uff0c is fullwidth comma, \uff1b is fullwidth semicolon
-                comma_parts = re.split(r"(?<=[,;\uff0c\uff1b])\s*", part)
-                comma_parts = [cp.strip() for cp in comma_parts if cp.strip()]
-
-                for cp in comma_parts:
-                    cp_duration = duration * (len(cp) / len(entry.text))
-                    if cp_duration > max_duration_sec or len(cp) > max_chars:
-                        # Split by space (words) for non-CJK,
-                        # or by character count for CJK
-                        has_cjk = any(
-                            "\u3400" <= c <= "\u4dbf"
-                            or "\u4e00" <= c <= "\u9fff"
-                            or "\uf900" <= c <= "\ufaff"
-                            for c in cp
-                        )
-                        if has_cjk:
-                            chunk_size = 15
-                            chunks = [
-                                cp[i : i + chunk_size]
-                                for i in range(0, len(cp), chunk_size)
-                            ]
-                            refined_parts.extend(chunks)
-                        else:
-                            words = cp.split()
-                            chunk_size = 10
-                            word_chunks = []
-                            for i in range(0, len(words), chunk_size):
-                                chunk = " ".join(words[i : i + chunk_size])
-                                if chunk:
-                                    word_chunks.append(chunk)
-                            refined_parts.extend(word_chunks)
-                    else:
-                        refined_parts.append(cp)
+                chunks = _split_long_part_by_length(
+                    part, max_chars, min_words, min_cjk_chars
+                )
+                refined_parts.extend(chunks)
             else:
                 refined_parts.append(part)
 
