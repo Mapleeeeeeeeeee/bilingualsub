@@ -1,0 +1,31 @@
+- generic [ref=e3]:
+    - banner [ref=e4]:
+        - button "EN" [ref=e5]
+    - main [ref=e6]:
+        - generic [ref=e40]:
+            - generic [ref=e41]:
+                - heading "影片下載完成" [level=2] [ref=e42]
+                - paragraph [ref=e43]: 影片已下載完成，準備好產生字幕。
+            - generic [ref=e45]: 您的瀏覽器不支援影片播放
+            - generic [ref=e46]:
+                - generic [ref=e47]:
+                    - generic [ref=e48]: 翻譯語言
+                    - generic [ref=e49]:
+                        - combobox [ref=e50] [cursor=pointer]:
+                            - option "英文" [selected]
+                            - option "繁體中文"
+                            - option "日文"
+                            - option "韓文"
+                        - generic [ref=e51]: →
+                        - combobox [ref=e52] [cursor=pointer]:
+                            - option "英文"
+                            - option "繁體中文" [selected]
+                            - option "日文"
+                            - option "韓文"
+                - button "產生字幕" [ref=e53]
+                - generic [ref=e54]:
+                    - link "下載原始影片" [ref=e55] [cursor=pointer]:
+                        - /url: /api/jobs/26e28500372a/download/source_video
+                    - link "下載音訊" [ref=e56] [cursor=pointer]:
+                        - /url: /api/jobs/26e28500372a/download/audio
+                    - button "重新開始" [ref=e57]

@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>片頭 & 浮水印預覽</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500;600&family=Inter:wght@300;400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Inter', -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 56px;
+  }
+  h2 {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #555;
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .note {
+    font-size: 13px;
+    color: #555;
+    max-width: 640px;
+    text-align: center;
+    line-height: 1.7;
+  }
+  .play-btn {
+    padding: 10px 32px;
+    background: transparent;
+    color: #888;
+    border: 1px solid #333;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+    letter-spacing: 0.5px;
+  }
+  .play-btn:hover { color: #fff; border-color: #666; }
+
+  /* ============================
+     INTRO — cinematic disclaimer
+     ============================ */
+  .intro-frame {
+    width: 960px;
+    height: 540px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    box-shadow: 0 4px 60px rgba(0,0,0,0.6);
+  }
+
+  /* ============================
+     OPTION A — Centered Cinematic
+     ============================ */
+  .variant-a { text-align: center; }
+  .a-label {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    animation: aIn 0.8s ease-out 0.3s both;
+  }
+  .a-channel {
+    font-family: 'Inter', sans-serif;
+    font-size: 36px;
+    font-weight: 500;
+    color: rgba(255,255,255,1);
+    letter-spacing: 0.5px;
+    animation: aIn 0.8s ease-out 0.6s both;
+  }
+  .a-title {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 16px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    margin-top: 8px;
+    max-width: 600px;
+    line-height: 1.5;
+    animation: aIn 0.8s ease-out 0.9s both;
+  }
+  .a-sep {
+    width: 36px;
+    height: 1px;
+    background: rgba(255,255,255,0.25);
+    margin: 24px auto;
+    animation: aIn 0.8s ease-out 1.1s both;
+  }
+  .a-url {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.3px;
+    animation: aIn 0.8s ease-out 1.3s both;
+  }
+  .a-copyright {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.45);
+    line-height: 2;
+    max-width: 500px;
+    animation: aIn 0.8s ease-out 1.6s both;
+  }
+  .a-en {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    animation: aIn 0.8s ease-out 1.9s both;
+  }
+  @keyframes aIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .variant-a.playing .a-label     { animation: aCine 7s ease-in-out 0.3s both; }
+  .variant-a.playing .a-channel   { animation: aCine 7s ease-in-out 0.6s both; }
+  .variant-a.playing .a-title     { animation: aCine 7s ease-in-out 0.9s both; }
+  .variant-a.playing .a-sep       { animation: aCine 7s ease-in-out 1.1s both; }
+  .variant-a.playing .a-url       { animation: aCine 7s ease-in-out 1.3s both; }
+  .variant-a.playing .a-copyright { animation: aCine 7s ease-in-out 1.6s both; }
+  .variant-a.playing .a-en        { animation: aCine 7s ease-in-out 1.9s both; }
+  @keyframes aCine {
+    0%   { opacity: 0; transform: translateY(6px); }
+    12%  { opacity: 1; transform: translateY(0); }
+    78%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* ============================
+     OPTION B — Left-aligned Document
+     ============================ */
+  .variant-b {
+    justify-content: center;
+    align-items: flex-start;
+    padding: 0 100px;
+  }
+  .b-source-block {
+    margin-bottom: 28px;
+    animation: bIn 0.8s ease-out 0.3s both;
+  }
+  .b-label {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .b-label-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.3px;
+    margin-bottom: 14px;
+  }
+  .b-slash {
+    color: rgba(255,255,255,0.2);
+    margin: 0 2px;
+  }
+  .b-label-inline {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.3px;
+  }
+  .b-eyebrow {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 6px;
+  }
+  .b-channel-url {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.35);
+    margin-top: 6px;
+  }
+  .b-channel {
+    font-family: 'Inter', sans-serif;
+    font-size: 32px;
+    font-weight: 500;
+    color: rgba(255,255,255,1);
+  }
+  .b-meta-block {
+    margin-bottom: 32px;
+    animation: bIn 0.8s ease-out 0.7s both;
+  }
+  .b-title {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 16px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+  .b-url {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.5);
+  }
+  .b-copyright-block {
+    border-left: 1px solid rgba(255,255,255,0.2);
+    padding-left: 20px;
+    animation: bIn 0.8s ease-out 1.1s both;
+  }
+  .b-copyright {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.45);
+    line-height: 2;
+  }
+  .b-en {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 12px;
+  }
+  .b-brand {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.25);
+    position: absolute;
+    bottom: 28px;
+    right: 36px;
+    animation: bIn 0.8s ease-out 1.4s both;
+  }
+  @keyframes bIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .variant-b.playing .b-source-block    { animation: bCine 6s ease-in-out 0.3s both; }
+  .variant-b.playing .b-meta-block      { animation: bCine 6s ease-in-out 0.7s both; }
+  .variant-b.playing .b-copyright-block { animation: bCine 6s ease-in-out 1.1s both; }
+  .variant-b.playing .b-brand           { animation: bCine 6s ease-in-out 1.4s both; }
+  @keyframes bCine {
+    0%   { opacity: 0; transform: translateX(-8px); }
+    12%  { opacity: 1; transform: translateX(0); }
+    78%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* ============================
+     OPTION C — Minimal Card
+     ============================ */
+  .variant-c { justify-content: center; align-items: center; }
+  .c-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 48px 56px;
+    max-width: 520px;
+    text-align: center;
+    animation: cCardIn 1s ease-out 0.3s both;
+  }
+  .c-from {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+  .c-channel {
+    font-family: 'Inter', sans-serif;
+    font-size: 28px;
+    font-weight: 500;
+    color: rgba(255,255,255,1);
+    margin-bottom: 8px;
+  }
+  .c-title {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+  .c-url {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 0;
+  }
+  .c-divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.15);
+    margin: 24px 0;
+  }
+  .c-copyright {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 11px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.4);
+    line-height: 1.8;
+  }
+  .c-en {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+  }
+  @keyframes cCardIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .variant-c.playing .c-card { animation: cCardCine 5s ease-in-out 0.3s both; }
+  @keyframes cCardCine {
+    0%   { opacity: 0; transform: scale(0.96); }
+    15%  { opacity: 1; transform: scale(1); }
+    78%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.98); }
+  }
+
+  /* ============================
+     VIDEO — watermark + subtitles
+     ============================ */
+  .video-frame {
+    width: 960px;
+    height: 540px;
+    background: linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 60px rgba(0,0,0,0.6);
+  }
+  .video-frame .fake-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px;
+  }
+  .video-frame .subtitle-original {
+    font-size: 14px;
+    color: rgba(255, 255, 100, 0.85);
+    text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+    margin-bottom: 4px;
+  }
+  .video-frame .subtitle-translated {
+    font-size: 20px;
+    color: rgba(255, 255, 100, 1);
+    text-align: center;
+    text-shadow: 0 1px 5px rgba(0,0,0,0.9);
+    font-weight: 500;
+  }
+  .watermark {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* ============================
+     TIMELINE
+     ============================ */
+  .timeline {
+    width: 960px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 48px;
+  }
+  .timeline .segment {
+    height: 4px;
+    border-radius: 2px;
+    position: relative;
+  }
+  .timeline .segment.intro {
+    width: 5%;
+    background: rgba(255,255,255,0.2);
+  }
+  .timeline .segment.main {
+    flex: 1;
+    background: rgba(255,255,255,0.12);
+  }
+  .timeline .segment::after {
+    content: attr(data-label);
+    position: absolute;
+    top: 12px;
+    left: 0;
+    font-size: 11px;
+    color: #444;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<!-- Variant 1: 上下堆疊 -->
+<div class="section">
+  <h2>Variant 1 / 中英上下堆疊</h2>
+  <div class="intro-frame variant-b" id="introFrameA">
+    <div class="b-source-block">
+      <div class="b-label">原始影片來自</div>
+      <div class="b-label-sub">Original video from</div>
+      <div class="b-channel">3Blue1Brown</div>
+      <div class="b-channel-url">youtube.com/@3Blue1Brown</div>
+    </div>
+    <div class="b-meta-block">
+      <div class="b-title">How Large Language Models Work</div>
+      <div class="b-url">youtube.com/watch?v=wjZofJX0v4M</div>
+    </div>
+    <div class="b-copyright-block">
+      <div class="b-copyright">
+        翻譯字幕由開源專案 BilingualSub 產生<br>
+        所有內容及著作權屬於原始創作者所有<br>
+        如需移除，請聯繫上傳者
+      </div>
+      <div class="b-copyright b-en">
+        Subtitles generated by BilingualSub (open source)<br>
+        All content and copyrights belong to the original creator<br>
+        For removal requests, please contact the uploader
+      </div>
+    </div>
+    <div class="b-brand">BilingualSub</div>
+  </div>
+  <button class="play-btn" onclick="replay('A')">Replay</button>
+  <p class="note">中英文分兩行，英文稍暗。頻道名下方附 channel URL。</p>
+</div>
+
+<!-- Variant 2: 斜線分隔 -->
+<div class="section">
+  <h2>Variant 2 / 斜線分隔</h2>
+  <div class="intro-frame variant-b" id="introFrameB">
+    <div class="b-source-block">
+      <div class="b-label">原始影片來自<span class="b-slash"> / </span><span class="b-label-inline">Original video from</span></div>
+      <div class="b-channel">3Blue1Brown</div>
+      <div class="b-channel-url">youtube.com/@3Blue1Brown</div>
+    </div>
+    <div class="b-meta-block">
+      <div class="b-title">How Large Language Models Work</div>
+      <div class="b-url">youtube.com/watch?v=wjZofJX0v4M</div>
+    </div>
+    <div class="b-copyright-block">
+      <div class="b-copyright">
+        翻譯字幕由開源專案 BilingualSub 產生<br>
+        所有內容及著作權屬於原始創作者所有<br>
+        如需移除，請聯繫上傳者
+      </div>
+      <div class="b-copyright b-en">
+        Subtitles generated by BilingualSub (open source)<br>
+        All content and copyrights belong to the original creator<br>
+        For removal requests, please contact the uploader
+      </div>
+    </div>
+    <div class="b-brand">BilingualSub</div>
+  </div>
+  <button class="play-btn" onclick="replay('B')">Replay</button>
+  <p class="note">中英用斜線連在同一行，更緊湊。</p>
+</div>
+
+<!-- Variant 3: 英文在上當 eyebrow -->
+<div class="section">
+  <h2>Variant 3 / 英文 eyebrow 在上</h2>
+  <div class="intro-frame variant-b" id="introFrameC">
+    <div class="b-source-block">
+      <div class="b-eyebrow">ORIGINAL VIDEO FROM</div>
+      <div class="b-label">原始影片來自</div>
+      <div class="b-channel">3Blue1Brown</div>
+      <div class="b-channel-url">youtube.com/@3Blue1Brown</div>
+    </div>
+    <div class="b-meta-block">
+      <div class="b-title">How Large Language Models Work</div>
+      <div class="b-url">youtube.com/watch?v=wjZofJX0v4M</div>
+    </div>
+    <div class="b-copyright-block">
+      <div class="b-copyright">
+        翻譯字幕由開源專案 BilingualSub 產生<br>
+        所有內容及著作權屬於原始創作者所有<br>
+        如需移除，請聯繫上傳者
+      </div>
+      <div class="b-copyright b-en">
+        Subtitles generated by BilingualSub (open source)<br>
+        All content and copyrights belong to the original creator<br>
+        For removal requests, please contact the uploader
+      </div>
+    </div>
+    <div class="b-brand">BilingualSub</div>
+  </div>
+  <button class="play-btn" onclick="replay('C')">Replay</button>
+  <p class="note">英文大寫 letter-spacing 在最上方當 eyebrow，中文在下，電影感最強。</p>
+</div>
+
+<!-- Section 2: Video with Watermark -->
+<div class="section">
+  <h2>2 / 正片 — 浮水印 + 雙語字幕</h2>
+  <div class="video-frame">
+    <div class="watermark">Source: 3Blue1Brown</div>
+    <div class="fake-content">
+      <div class="subtitle-original">The key insight is that attention lets the model focus on relevant context</div>
+      <div class="subtitle-translated">關鍵洞見是，注意力機制讓模型能聚焦在相關的上下文</div>
+    </div>
+  </div>
+  <p class="note">
+    右上角小字半透明浮水印全程顯示，標示原始來源。
+  </p>
+</div>
+
+<!-- Section 3: Timeline -->
+<div class="section">
+  <h2>3 / 最終影片結構</h2>
+  <div class="timeline">
+    <div class="segment intro" data-label="片頭 ~5s"></div>
+    <div class="segment main" data-label="正片（浮水印 + 燒錄字幕）"></div>
+  </div>
+</div>
+
+<script>
+function replay(variant) {
+  const f = document.getElementById('introFrame' + variant);
+  f.classList.remove('playing');
+  void f.offsetWidth;
+  f.classList.add('playing');
+}
+</script>
+</body>
+</html>

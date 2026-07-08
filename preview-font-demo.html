@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>片頭字體推薦</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@300;400;500;600&family=Roboto:wght@300;400;500&family=Outfit:wght@300;400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=DM+Sans:wght@300;400;500&family=Source+Han+Sans+TC:wght@300;400;500;700&family=Lora:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+  }
+  h2 {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #555;
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .note {
+    font-size: 13px;
+    color: #555;
+    text-align: center;
+    line-height: 1.7;
+    max-width: 700px;
+  }
+  .rec {
+    font-size: 12px;
+    color: #c8a44e;
+    letter-spacing: 1px;
+  }
+
+  /* Intro frame */
+  .intro-frame {
+    width: 960px;
+    height: 540px;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 60px rgba(0,0,0,0.6);
+    padding: 0 10%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 4px;
+  }
+  .label-zh {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 10px;
+  }
+  .channel {
+    font-size: 32px;
+    font-weight: 500;
+    color: rgba(255,255,255,1);
+    margin-bottom: 4px;
+  }
+  .ch-url {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 16px;
+  }
+  .title {
+    font-size: 16px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .vid-url {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 20px;
+  }
+  .decl-zh {
+    font-size: 12px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.45);
+    line-height: 2;
+  }
+  .decl-en {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    line-height: 2;
+    margin-top: 8px;
+  }
+  .brand {
+    position: absolute;
+    bottom: 28px;
+    right: 36px;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.25);
+  }
+
+  /* Font combos */
+  .combo-1 .eyebrow, .combo-1 .ch-url, .combo-1 .vid-url, .combo-1 .decl-en, .combo-1 .brand { font-family: 'Inter', sans-serif; }
+  .combo-1 .channel { font-family: 'Inter', sans-serif; }
+  .combo-1 .label-zh, .combo-1 .title, .combo-1 .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+
+  .combo-2 .eyebrow, .combo-2 .ch-url, .combo-2 .vid-url, .combo-2 .decl-en, .combo-2 .brand { font-family: 'Inter', sans-serif; }
+  .combo-2 .channel { font-family: 'Inter', sans-serif; }
+  .combo-2 .label-zh, .combo-2 .title, .combo-2 .decl-zh { font-family: 'Noto Serif TC', serif; }
+
+  .combo-3 .eyebrow, .combo-3 .ch-url, .combo-3 .vid-url, .combo-3 .decl-en, .combo-3 .brand { font-family: 'Outfit', sans-serif; }
+  .combo-3 .channel { font-family: 'Outfit', sans-serif; font-weight: 600; }
+  .combo-3 .label-zh, .combo-3 .title, .combo-3 .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+
+  .combo-4 .eyebrow, .combo-4 .ch-url, .combo-4 .vid-url, .combo-4 .decl-en, .combo-4 .brand { font-family: 'Plus Jakarta Sans', sans-serif; }
+  .combo-4 .channel { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; }
+  .combo-4 .label-zh, .combo-4 .title, .combo-4 .decl-zh { font-family: 'Noto Sans TC', sans-serif; }
+
+  .combo-5 .eyebrow, .combo-5 .ch-url, .combo-5 .vid-url, .combo-5 .decl-en, .combo-5 .brand { font-family: 'DM Sans', sans-serif; }
+  .combo-5 .channel { font-family: 'DM Sans', sans-serif; font-weight: 500; }
+  .combo-5 .label-zh, .combo-5 .title, .combo-5 .decl-zh { font-family: 'Noto Serif TC', serif; font-weight: 400; }
+
+  .combo-6 .eyebrow, .combo-6 .ch-url, .combo-6 .vid-url, .combo-6 .decl-en, .combo-6 .brand { font-family: 'Inter', sans-serif; }
+  .combo-6 .channel { font-family: 'Playfair Display', serif; font-weight: 500; }
+  .combo-6 .label-zh, .combo-6 .title, .combo-6 .decl-zh { font-family: 'Noto Serif TC', serif; font-weight: 400; }
+</style>
+</head>
+<body>
+
+<!-- Combo 1: Inter + Noto Sans TC -->
+<div class="section">
+  <h2>1 / Inter + Noto Sans TC</h2>
+  <span class="rec">推薦 — 乾淨現代，中文可讀性最佳</span>
+  <div class="intro-frame combo-1">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">英文 Inter（~300KB）+ 中文 Noto Sans TC（~8MB）<br>全無襯線，統一感強。Google Fonts 免費開源。</p>
+</div>
+
+<!-- Combo 2: Inter + Noto Serif TC -->
+<div class="section">
+  <h2>2 / Inter + Noto Serif TC</h2>
+  <span class="rec">推薦 — 中文襯線有質感，電影感最強</span>
+  <div class="intro-frame combo-2">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">英文 Inter + 中文 Noto Serif TC（~9MB）<br>襯線中文 + 無襯線英文，對比層次更豐富。</p>
+</div>
+
+<!-- Combo 3: Outfit + Noto Sans TC -->
+<div class="section">
+  <h2>3 / Outfit + Noto Sans TC</h2>
+  <div class="intro-frame combo-3">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">Outfit 幾何感更強，字母圓潤。搭配 Noto Sans TC 整體偏現代科技風。</p>
+</div>
+
+<!-- Combo 4: Plus Jakarta Sans + Noto Sans TC -->
+<div class="section">
+  <h2>4 / Plus Jakarta Sans + Noto Sans TC</h2>
+  <div class="intro-frame combo-4">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">Plus Jakarta Sans 筆畫末端帶微妙圓角，溫暖友善。適合「善意分享」的語氣。</p>
+</div>
+
+<!-- Combo 5: DM Sans + Noto Serif TC -->
+<div class="section">
+  <h2>5 / DM Sans + Noto Serif TC</h2>
+  <div class="intro-frame combo-5">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">DM Sans 低調精緻 + Noto Serif TC 襯線。文件感 + 質感兼具。</p>
+</div>
+
+<!-- Combo 6: Playfair Display + Noto Serif TC -->
+<div class="section">
+  <h2>6 / Playfair Display (頻道名) + Inter + Noto Serif TC</h2>
+  <div class="intro-frame combo-6">
+    <div class="eyebrow">ORIGINAL VIDEO FROM</div>
+    <div class="label-zh">原始影片來自</div>
+    <div class="channel">3Blue1Brown</div>
+    <div class="ch-url">https://www.youtube.com/channel/UCYO_jab_esuFRV4b17AJtAw</div>
+    <div class="title">But what is a neural network? | Deep learning chapter 1</div>
+    <div class="vid-url">https://www.youtube.com/watch?v=aircAruvnKk</div>
+    <div class="decl-zh">翻譯字幕由開源專案 BilingualSub 產生<br>所有內容及著作權屬於原始創作者所有<br>如需移除，請聯繫上傳者</div>
+    <div class="decl-en">Subtitles generated by BilingualSub (open source)<br>All content and copyrights belong to the original creator<br>For removal requests, please contact the uploader</div>
+    <div class="brand">BilingualSub</div>
+  </div>
+  <p class="note">頻道名用 Playfair Display 襯線體，最有電影海報感。但只有英文適用。</p>
+</div>
+
+<div class="section">
+  <h2>字體大小參考</h2>
+  <p class="note">
+    全部都是 Google Fonts，開源免費可 bundle。<br><br>
+    <strong>方案 1</strong>：只 bundle 英文字體（~300KB），中文靠系統/Docker fonts-noto-cjk<br>
+    <strong>方案 2</strong>：Bundle 英文 + 中文（~8-10MB total），保證所有環境一致<br><br>
+    Docker 已安裝 <code>fonts-noto-cjk</code>，所以中文 Noto 系列在容器內已經可用。<br>
+    macOS 本地開發需要自行安裝或靠 fontfile= 指定 bundle 路徑。
+  </p>
+</div>
+
+</body>
+</html>
