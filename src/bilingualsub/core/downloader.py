@@ -183,6 +183,13 @@ def _download_video(
     # Check if FFmpeg is available
     has_ffmpeg = shutil.which("ffmpeg") is not None
 
+    # JS runtimes for YouTube's signature-decryption challenge, in priority
+    # order. "deno" stays highest priority (yt-dlp's own default); "node" is
+    # appended as a fallback since the Docker image installs Node.js but not
+    # Deno. This mirrors the CLI's `--js-runtimes node` (which appends to the
+    # default-enabled runtime list rather than replacing it).
+    js_runtimes: dict[str, dict[str, str]] = {"deno": {}, "node": {}}
+
     if has_ffmpeg:
         # High quality format (requires FFmpeg for merging)
         ydl_opts: dict[str, Any] = {
@@ -195,6 +202,7 @@ def _download_video(
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [_progress_hook],
+            "js_runtimes": js_runtimes,
         }
     else:
         # Fallback format (no merge required, works without FFmpeg)
@@ -204,6 +212,7 @@ def _download_video(
             "quiet": True,
             "no_warnings": True,
             "progress_hooks": [_progress_hook],
+            "js_runtimes": js_runtimes,
         }
 
     # Optional: allow authenticated downloads for environments affected by
