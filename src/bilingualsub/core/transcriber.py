@@ -1,5 +1,6 @@
 """Audio transcription using Whisper API (Groq or OpenAI)."""
 
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -109,6 +110,113 @@ def _transcribe_single(
         raise TranscriptionError(f"Failed to parse transcription result: {e}") from e
 
 
+def _split_long_entries(
+    entries: list[SubtitleEntry],
+    max_duration_sec: float = 6.0,
+    max_chars: int = 80,
+) -> list[SubtitleEntry]:
+    """Split long subtitle entries.
+
+    Splits based on duration, character count, and CJK boundaries.
+    """
+    new_entries = []
+    current_index = 1
+    for entry in entries:
+        duration = (entry.end - entry.start).total_seconds()
+        if duration <= max_duration_sec and len(entry.text) <= max_chars:
+            new_entries.append(
+                SubtitleEntry(
+                    index=current_index,
+                    start=entry.start,
+                    end=entry.end,
+                    text=entry.text,
+                )
+            )
+            current_index += 1
+            continue
+
+        # Split by sentence endings first
+        raw_parts = re.split(r"(?<=[.?!])\s+", entry.text)
+        parts = [p.strip() for p in raw_parts if p.strip()]
+
+        refined_parts = []
+        for part in parts:
+            part_duration = duration * (len(part) / len(entry.text))
+            if part_duration > max_duration_sec or len(part) > max_chars:
+                # Split by clause boundaries (commas and semicolons)
+                # \uff0c is fullwidth comma, \uff1b is fullwidth semicolon
+                comma_parts = re.split(r"(?<=[,;\uff0c\uff1b])\s*", part)
+                comma_parts = [cp.strip() for cp in comma_parts if cp.strip()]
+
+                for cp in comma_parts:
+                    cp_duration = duration * (len(cp) / len(entry.text))
+                    if cp_duration > max_duration_sec or len(cp) > max_chars:
+                        # Split by space (words) for non-CJK,
+                        # or by character count for CJK
+                        has_cjk = any(
+                            "\u3400" <= c <= "\u4dbf"
+                            or "\u4e00" <= c <= "\u9fff"
+                            or "\uf900" <= c <= "\ufaff"
+                            for c in cp
+                        )
+                        if has_cjk:
+                            chunk_size = 15
+                            chunks = [
+                                cp[i : i + chunk_size]
+                                for i in range(0, len(cp), chunk_size)
+                            ]
+                            refined_parts.extend(chunks)
+                        else:
+                            words = cp.split()
+                            chunk_size = 10
+                            word_chunks = []
+                            for i in range(0, len(words), chunk_size):
+                                chunk = " ".join(words[i : i + chunk_size])
+                                if chunk:
+                                    word_chunks.append(chunk)
+                            refined_parts.extend(word_chunks)
+                    else:
+                        refined_parts.append(cp)
+            else:
+                refined_parts.append(part)
+
+        total_len = sum(len(p) for p in refined_parts)
+        if total_len == 0:
+            new_entries.append(
+                SubtitleEntry(
+                    index=current_index,
+                    start=entry.start,
+                    end=entry.end,
+                    text=entry.text,
+                )
+            )
+            current_index += 1
+            continue
+
+        current_time = entry.start
+        for part in refined_parts:
+            part_ratio = len(part) / total_len
+            part_dur = timedelta(seconds=duration * part_ratio)
+            part_end = current_time + part_dur
+
+            if part == refined_parts[-1]:
+                part_end = entry.end
+
+            if part_end > current_time:
+                new_entries.append(
+                    SubtitleEntry(
+                        index=current_index,
+                        start=current_time,
+                        end=part_end,
+                        text=part,
+                    )
+                )
+                current_index += 1
+                current_time = part_end
+
+    return new_entries
+
+
 def transcribe_audio(
     audio_path: Path, *, language: str = "en", prompt: str | None = None
 ) -> Subtitle:
@@ -141,28 +249,31 @@ def transcribe_audio(
 
     file_size_mb = audio_path.stat().st_size / (1024 * 1024)
     if file_size_mb <= 25:
-        return _transcribe_single(
+        subtitle = _transcribe_single(
             audio_path, language=language, settings=settings, prompt=prompt
         )
-
-    # Large file: split into chunks and transcribe each
-
-    chunks = split_audio(audio_path, output_dir=audio_path.parent)
-    all_entries: list[SubtitleEntry] = []
-    idx = 1
-    for chunk_path, time_offset in chunks:
-        subtitle = _transcribe_single(
-            chunk_path, language=language, settings=settings, prompt=prompt
-        )
-        offset_td = timedelta(seconds=time_offset)
-        for entry in subtitle.entries:
-            all_entries.append(
-                SubtitleEntry(
-                    index=idx,
-                    start=entry.start + offset_td,
-                    end=entry.end + offset_td,
-                    text=entry.text,
-                )
+        all_entries = subtitle.entries
+    else:
+        # Large file: split into chunks and transcribe each
+        chunks = split_audio(audio_path, output_dir=audio_path.parent)
+        all_entries = []
+        idx = 1
+        for chunk_path, time_offset in chunks:
+            subtitle = _transcribe_single(
+                chunk_path, language=language, settings=settings, prompt=prompt
             )
-            idx += 1
-    return Subtitle(entries=all_entries)
+            offset_td = timedelta(seconds=time_offset)
+            for entry in subtitle.entries:
+                all_entries.append(
+                    SubtitleEntry(
+                        index=idx,
+                        start=entry.start + offset_td,
+                        end=entry.end + offset_td,
+                        text=entry.text,
+                    )
+                )
+                idx += 1
+
+    # Split long entries before returning
+    split_entries = _split_long_entries(all_entries)
+    return Subtitle(entries=split_entries)
