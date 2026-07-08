@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from bilingualsub.core import (
     DownloadError,
     Subtitle,
+    SubtitleEntry,
     TranscriptionError,
     TranslationError,
     VideoMetadata,
@@ -38,7 +39,7 @@ from bilingualsub.core import (
     translate_subtitle,
 )
 from bilingualsub.core.subtitle_fetcher import fetch_manual_subtitle
-from bilingualsub.formats import serialize_bilingual_ass, serialize_srt
+from bilingualsub.formats import parse_srt, serialize_bilingual_ass, serialize_srt
 from bilingualsub.utils import (
     FFmpegError,
     burn_subtitles,
@@ -569,14 +570,75 @@ _INTRO_PROGRESS_END = 90.0
 _CONCAT_PROGRESS_END = 99.0
 
 
+def _prepare_burn_subtitle(
+    srt_content: str,
+    work_dir: Path,
+    processing_mode: ProcessingMode,
+    video_width: int,
+    video_height: int,
+    log: structlog.stdlib.BoundLogger,
+) -> Path:
+    """Prepare subtitle file for burning, converting to ASS for bilingual subtitles."""
+    srt_path = work_dir / "subtitle_edited.srt"
+    srt_path.write_text(srt_content, encoding="utf-8")
+
+    if processing_mode == ProcessingMode.SUBTITLE:
+        try:
+            edited_sub = parse_srt(srt_content)
+            original_entries = []
+            translated_entries = []
+
+            for entry in edited_sub.entries:
+                parts = entry.text.split("\n", 1)
+                trans_text = parts[0].strip()
+                orig_text = parts[1].strip() if len(parts) > 1 else ""
+
+                if not trans_text:
+                    trans_text = "\u200b"
+                if not orig_text:
+                    orig_text = "\u200b"
+
+                original_entries.append(
+                    SubtitleEntry(
+                        index=entry.index,
+                        start=entry.start,
+                        end=entry.end,
+                        text=orig_text,
+                    )
+                )
+                translated_entries.append(
+                    SubtitleEntry(
+                        index=entry.index,
+                        start=entry.start,
+                        end=entry.end,
+                        text=trans_text,
+                    )
+                )
+
+            original_sub = Subtitle(entries=original_entries)
+            translated_sub = Subtitle(entries=translated_entries)
+
+            ass_content = serialize_bilingual_ass(
+                original_sub,
+                translated_sub,
+                video_width=video_width,
+                video_height=video_height,
+            )
+            ass_path = work_dir / "subtitle_edited.ass"
+            ass_path.write_text(ass_content, encoding="utf-8")
+            return ass_path
+        except Exception as e:
+            log.warning("failed_to_convert_edited_srt_to_ass", error=str(e))
+
+    return srt_path
+
+
 async def run_burn(job: Job, srt_content: str) -> None:
     """Burn user-edited SRT into the source video."""
     log = logger.bind(job_id=job.id)
     try:
         source_video = job.output_files[FileType.SOURCE_VIDEO]
         work_dir = source_video.parent
-        srt_path = work_dir / "subtitle_edited.srt"
-        srt_path.write_text(srt_content, encoding="utf-8")
 
         _send_progress(job, JobStatus.BURNING, 0.0, "burn", "Burning subtitles")
         output_video = work_dir / "output.mp4"
@@ -595,10 +657,21 @@ async def run_burn(job: Job, srt_content: str) -> None:
                 f"Burning subtitles ({percent:.0f}%)",
             )
 
+        # Prepare the subtitle path (convert to ASS if bilingual)
+        burn_subtitle_path = await asyncio.to_thread(
+            _prepare_burn_subtitle,
+            srt_content,
+            work_dir,
+            job.processing_mode,
+            job.video_width,
+            job.video_height,
+            log,
+        )
+
         await asyncio.to_thread(
             burn_subtitles,
             source_video,
-            srt_path,
+            burn_subtitle_path,
             output_video,
             on_progress=on_burn_progress,
             watermark_text=watermark_text,
