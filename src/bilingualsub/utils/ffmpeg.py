@@ -21,6 +21,19 @@ _FONT_ZH_REGULAR = _ASSETS_DIR / "NotoSansTC-Regular.ttf"
 _FONT_ZH_BOLD = _ASSETS_DIR / "NotoSansTC-Bold.ttf"
 _FONT_ZH_FALLBACK = "Noto Sans CJK TC"
 
+# Canonical audio format concat_videos() re-encodes both clips' audio to,
+# so intro/main-video audio parameter mismatches (sample rate, channels)
+# never leak into the final output.
+_CONCAT_AUDIO_SAMPLE_RATE = 48000
+_CONCAT_AUDIO_CHANNELS = 2
+_CONCAT_AUDIO_CHANNEL_LAYOUT = "stereo"
+_CONCAT_AUDIO_BITRATE = "192k"
+
+# concat_videos()'s filter_complex graph labels.
+_CONCAT_AUDIO_LABEL_FIRST = "a0"
+_CONCAT_AUDIO_LABEL_SECOND = "a1"
+_CONCAT_AUDIO_LABEL_OUT = "aout"
+
 
 def _font_arg(fontfile: Path, fallback_name: str) -> str:
     """Return a drawtext font option.
@@ -371,7 +384,19 @@ def extract_video_metadata(video_path: Path) -> dict[str, str | float | int]:
 
     try:
         title = data.get("format", {}).get("tags", {}).get("title", video_path.stem)
-        duration = float(data.get("format", {}).get("duration", 0))
+        # Prefer the video stream's own duration over the container-level
+        # duration. The container-level value reflects the *longest* stream,
+        # which is the audio track whenever audio and video drift apart
+        # (e.g. yt-dlp downloads video/audio as separate streams that are
+        # then muxed, so they don't always end at the same timestamp).
+        # Fall back to the container duration for sources that omit a
+        # per-stream duration tag.
+        video_stream_duration = video_stream.get("duration")
+        duration = (
+            float(video_stream_duration)
+            if video_stream_duration is not None
+            else float(data.get("format", {}).get("duration", 0))
+        )
         width = int(video_stream.get("width", 0))
         height = int(video_stream.get("height", 0))
 
@@ -765,6 +790,95 @@ def generate_intro(  # noqa: PLR0915
     return output_path
 
 
+def _normalized_audio_filter(source_index: int, duration: float, label: str) -> str:
+    """Build a filter chain that decodes ``[source_index:a]`` into ``[label]``.
+
+    Resamples to the canonical concat audio format, then pads with silence
+    (``apad``) before trimming to ``duration`` (a source's own video
+    duration — yt-dlp downloads video/audio as separate streams that are
+    then muxed, so small duration drift between a file's video and audio
+    stream is routine in either direction). ``atrim`` alone can only cut
+    audio down, never extend it, so a source whose audio is *shorter* than
+    its video would otherwise leave the concatenated output that much short
+    of the video's length; ``apad`` (unbounded silence padding) run before
+    ``atrim`` makes the chain correct whether the source's real audio is
+    longer or shorter than ``duration``. Finally resets timestamps so the
+    segment starts at PTS 0.
+    """
+    return (
+        f"[{source_index}:a]aformat=sample_rates={_CONCAT_AUDIO_SAMPLE_RATE}:"
+        f"channel_layouts={_CONCAT_AUDIO_CHANNEL_LAYOUT},"
+        f"apad,"
+        f"atrim=duration={duration},"
+        f"asetpts=PTS-STARTPTS[{label}]"
+    )
+
+
+def _silent_audio_filter(duration: float, label: str) -> str:
+    """Build a filter chain generating ``duration`` seconds of silence into ``[label]``.
+
+    Used to pad the side of a concat that has no audio stream at all, so the
+    ``concat`` audio filter always joins two real streams instead of
+    referencing a nonexistent ``[N:a]`` input (which ffmpeg fails to bind).
+    ``anullsrc`` is a lavfi *source* filter, so it can be instantiated
+    directly inside ``-filter_complex`` without a separate ``-i``.
+    """
+    return (
+        f"anullsrc=channel_layout={_CONCAT_AUDIO_CHANNEL_LAYOUT}:"
+        f"sample_rate={_CONCAT_AUDIO_SAMPLE_RATE}:d={duration}[{label}]"
+    )
+
+
+def _side_audio_filter(
+    *, has_audio: bool, source_index: int, duration: float, label: str
+) -> str:
+    """Return one concat side's audio filter chain into ``[label]``.
+
+    Normalized decode of the real stream when present, otherwise generated
+    silence matched to that side's own video duration.
+    """
+    if has_audio:
+        return _normalized_audio_filter(source_index, duration, label)
+    return _silent_audio_filter(duration, label)
+
+
+def _concat_audio_filter_complex(
+    *,
+    first_has_audio: bool,
+    second_has_audio: bool,
+    first_audio_source_index: int,
+    second_audio_source_index: int,
+    first_duration: float,
+    second_duration: float,
+) -> str | None:
+    """Build concat_videos()'s ``-filter_complex`` audio graph.
+
+    Returns ``None`` when neither side has an audio stream (video-only
+    output; caller must then omit ``-filter_complex``/``-c:a`` entirely).
+    """
+    if not first_has_audio and not second_has_audio:
+        return None
+
+    first_label = _CONCAT_AUDIO_LABEL_FIRST
+    second_label = _CONCAT_AUDIO_LABEL_SECOND
+    first_stage = _side_audio_filter(
+        has_audio=first_has_audio,
+        source_index=first_audio_source_index,
+        duration=first_duration,
+        label=first_label,
+    )
+    second_stage = _side_audio_filter(
+        has_audio=second_has_audio,
+        source_index=second_audio_source_index,
+        duration=second_duration,
+        label=second_label,
+    )
+    concat_stage = (
+        f"[{first_label}][{second_label}]concat=n=2:v=0:a=1[{_CONCAT_AUDIO_LABEL_OUT}]"
+    )
+    return ";".join([first_stage, second_stage, concat_stage])
+
+
 def concat_videos(
     first_path: Path,
     second_path: Path,
@@ -772,7 +886,26 @@ def concat_videos(
     *,
     on_progress: Callable[[float], None] | None = None,
 ) -> Path:
-    """Concatenate two videos using FFmpeg concat demuxer (no re-encode)."""
+    """Concatenate two videos: video copy + normalized audio re-encode.
+
+    The video track is spliced via the FFmpeg concat demuxer using
+    ``-c:v copy`` (no re-encode), which is safe because both clips are
+    produced by this pipeline with matching h264 width/height/fps.
+
+    The audio track is NOT stream-copied. ``first_path`` and ``second_path``
+    may come from different sources (e.g. a generated intro at 48kHz vs. a
+    downloaded video's audio at 44.1kHz) and can therefore differ in sample
+    rate, channel layout, or codec profile. Copy-concatenating raw audio
+    packets under a single container-level format assumes those parameters
+    match; when they don't, the mismatched packets get mislabeled and either
+    fail to decode or decode as corrupted/silent audio. To be robust to any
+    such mismatch, each source's audio (when present) is decoded
+    independently (so each is interpreted with its own correct parameters),
+    normalized to one fixed sample rate/channel layout via ``aformat``,
+    trimmed to that source's own video duration, joined with the ``concat``
+    audio filter, and re-encoded once to AAC. A source with no audio stream
+    at all is padded with generated silence instead of being decoded.
+    """
     if not first_path.exists() or not first_path.is_file():
         raise FFmpegError(f"First video does not exist: {first_path}")
     if not second_path.exists() or not second_path.is_file():
@@ -785,13 +918,13 @@ def concat_videos(
             encoding="utf-8",
         )
 
-        # Estimate total duration for progress (sum of both clips)
-        try:
-            meta1 = extract_video_metadata(first_path)
-            meta2 = extract_video_metadata(second_path)
-            total_duration = float(meta1["duration"]) + float(meta2["duration"])
-        except FFmpegError:
-            total_duration = 0.0
+        first_meta = extract_video_metadata(first_path)
+        second_meta = extract_video_metadata(second_path)
+        first_duration = float(first_meta["duration"])
+        second_duration = float(second_meta["duration"])
+        total_duration = first_duration + second_duration
+        first_has_audio = bool(first_meta["has_audio"])
+        second_has_audio = bool(second_meta["has_audio"])
 
         cmd = [
             "ffmpeg",
@@ -801,13 +934,53 @@ def concat_videos(
             "0",
             "-i",
             str(concat_list_path),
-            "-c",
-            "copy",
-            "-progress",
-            "pipe:1",
-            "-y",
-            str(output_path),
         ]
+
+        # Extra decode inputs are only needed for sides that actually have
+        # an audio stream — a side with no audio is padded with generated
+        # silence (anullsrc) rather than decoding a nonexistent stream.
+        next_audio_source_index = 1
+        first_audio_source_index = 0
+        second_audio_source_index = 0
+        if first_has_audio:
+            cmd += ["-i", str(first_path)]
+            first_audio_source_index = next_audio_source_index
+            next_audio_source_index += 1
+        if second_has_audio:
+            cmd += ["-i", str(second_path)]
+            second_audio_source_index = next_audio_source_index
+            next_audio_source_index += 1
+
+        filter_complex = _concat_audio_filter_complex(
+            first_has_audio=first_has_audio,
+            second_has_audio=second_has_audio,
+            first_audio_source_index=first_audio_source_index,
+            second_audio_source_index=second_audio_source_index,
+            first_duration=first_duration,
+            second_duration=second_duration,
+        )
+
+        if filter_complex is not None:
+            cmd += ["-filter_complex", filter_complex]
+
+        cmd += ["-map", "0:v"]
+        if filter_complex is not None:
+            cmd += ["-map", f"[{_CONCAT_AUDIO_LABEL_OUT}]"]
+
+        cmd += ["-c:v", "copy"]
+        if filter_complex is not None:
+            cmd += [
+                "-c:a",
+                "aac",
+                "-ar",
+                str(_CONCAT_AUDIO_SAMPLE_RATE),
+                "-ac",
+                str(_CONCAT_AUDIO_CHANNELS),
+                "-b:a",
+                _CONCAT_AUDIO_BITRATE,
+            ]
+
+        cmd += ["-progress", "pipe:1", "-y", str(output_path)]
 
         _run_ffmpeg_with_progress(
             cmd,

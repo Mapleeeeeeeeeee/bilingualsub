@@ -23,6 +23,7 @@ _MOCK_METADATA = {
     "height": 1080,
     "fps": 30.0,
     "title": "test video",
+    "has_audio": True,
 }
 
 
@@ -372,10 +373,14 @@ class TestConcatVideos:
                 "metadata": mock_metadata,
             }
 
-    def test_when_both_inputs_exist_then_cmd_uses_concat_demuxer_and_copy(
+    def test_when_both_inputs_exist_then_video_is_copied_via_concat_demuxer(
         self, tmp_path: Path, mock_concat_ffmpeg: dict
     ) -> None:
-        """concat_videos must build a command with -f concat and -c copy."""
+        """concat_videos must splice video via the concat demuxer with -c:v copy.
+
+        Video re-encoding is unnecessary (both clips are matching h264 from
+        this pipeline), so the video track must still be a stream copy.
+        """
         first = tmp_path / "intro.mp4"
         first.write_bytes(b"fake intro")
         second = tmp_path / "main.mp4"
@@ -391,10 +396,63 @@ class TestConcatVideos:
         f_idx = cmd.index("-f")
         assert cmd[f_idx + 1] == "concat"
 
-        # Must copy streams without re-encoding
-        assert "-c" in cmd
-        c_idx = cmd.index("-c")
-        assert cmd[c_idx + 1] == "copy"
+        # Video must remain a stream copy
+        assert "-c:v" in cmd
+        cv_idx = cmd.index("-c:v")
+        assert cmd[cv_idx + 1] == "copy"
+
+        # Video track must be mapped from the concat-demuxer input
+        assert "-map" in cmd
+        assert "0:v" in cmd
+
+    def test_when_both_inputs_exist_then_audio_is_normalized_and_reencoded(
+        self, tmp_path: Path, mock_concat_ffmpeg: dict
+    ) -> None:
+        """concat_videos must NOT stream-copy audio.
+
+        Regression guard: `-c:a copy` under the concat demuxer assumes the
+        intro and main video's audio share identical sample rate/channel
+        layout, which is false when the main video's downloaded audio (e.g.
+        44.1kHz) differs from the generated intro's audio (48kHz). Copying
+        raw packets under one container-level format mislabels the second
+        clip's audio, producing decode errors / silence. The command must
+        instead decode each source's audio independently (`[1:a]`, `[2:a]`
+        from the two extra -i inputs), normalize via aformat, join with the
+        concat audio filter, and re-encode once with -c:a aac.
+        """
+        first = tmp_path / "intro.mp4"
+        first.write_bytes(b"fake intro")
+        second = tmp_path / "main.mp4"
+        second.write_bytes(b"fake main")
+        output = tmp_path / "final.mp4"
+
+        concat_videos(first, second, output)
+
+        cmd = _get_popen_cmd(mock_concat_ffmpeg["popen"])
+
+        # Audio must be re-encoded, not copied
+        assert "-c:a" in cmd
+        ca_idx = cmd.index("-c:a")
+        assert cmd[ca_idx + 1] == "aac"
+
+        # A top-level "-c copy" (both streams) must no longer be used
+        assert "-c" not in cmd
+
+        # Each source's audio must be decoded independently (not via the
+        # concat-demuxer input) and joined with the concat audio filter
+        assert "-filter_complex" in cmd
+        fc_idx = cmd.index("-filter_complex")
+        filter_graph = cmd[fc_idx + 1]
+        assert "[1:a]" in filter_graph
+        assert "[2:a]" in filter_graph
+        assert "concat=n=2:v=0:a=1" in filter_graph
+
+        # Both original files must be passed as extra inputs for that filter
+        assert str(first) in cmd
+        assert str(second) in cmd
+
+        # Filtered audio output must be mapped into the final stream
+        assert "[aout]" in cmd
 
     def test_when_first_input_does_not_exist_then_raises_ffmpeg_error(
         self, tmp_path: Path
@@ -419,6 +477,125 @@ class TestConcatVideos:
 
         with pytest.raises(FFmpegError, match="Second video does not exist"):
             concat_videos(first, second, output)
+
+    def test_given_both_inputs_have_audio_when_concat_then_each_side_is_trimmed_to_its_own_duration(
+        self, tmp_path: Path, mock_concat_ffmpeg: dict
+    ) -> None:
+        """Regression: untrimmed [1:a]/[2:a] concat used to splice each side's
+        full (possibly drifted) audio length instead of clamping it to that
+        side's own video duration. yt-dlp downloads video and audio as
+        separate streams that get muxed together, so small duration drift
+        between a file's video and audio stream is routine; without trimming,
+        that drift causes audio desync (trailing audio past video end, or a
+        silent gap) in the concatenated output. Each side's atrim=duration=
+        must match that side's own metadata duration, not the other side's.
+        """
+        first = tmp_path / "intro.mp4"
+        first.write_bytes(b"fake intro")
+        second = tmp_path / "main.mp4"
+        second.write_bytes(b"fake main")
+        output = tmp_path / "final.mp4"
+
+        meta_first = {**_MOCK_METADATA, "duration": 1.5, "has_audio": True}
+        meta_second = {**_MOCK_METADATA, "duration": 7.25, "has_audio": True}
+        mock_concat_ffmpeg["metadata"].side_effect = [meta_first, meta_second]
+
+        concat_videos(first, second, output)
+
+        cmd = _get_popen_cmd(mock_concat_ffmpeg["popen"])
+        fc_idx = cmd.index("-filter_complex")
+        filter_graph = cmd[fc_idx + 1]
+
+        assert "atrim=duration=1.5" in filter_graph
+        assert "atrim=duration=7.25" in filter_graph
+
+    def test_given_only_first_input_has_audio_when_concat_then_second_side_is_padded_with_silence(
+        self, tmp_path: Path, mock_concat_ffmpeg: dict
+    ) -> None:
+        """When one side has no audio stream at all, hardcoded [1:a]/[2:a]
+        used to make ffmpeg fail with "Error binding filtergraph
+        inputs/outputs" because the nonexistent stream can't be referenced.
+        The silent side must instead be padded with a generated anullsrc
+        segment so the concat audio filter always joins two real streams.
+        """
+        first = tmp_path / "intro.mp4"
+        first.write_bytes(b"fake intro")
+        second = tmp_path / "main.mp4"
+        second.write_bytes(b"fake main")
+        output = tmp_path / "final.mp4"
+
+        meta_first = {**_MOCK_METADATA, "duration": 2.0, "has_audio": True}
+        meta_second = {**_MOCK_METADATA, "duration": 5.0, "has_audio": False}
+        mock_concat_ffmpeg["metadata"].side_effect = [meta_first, meta_second]
+
+        concat_videos(first, second, output)
+
+        cmd = _get_popen_cmd(mock_concat_ffmpeg["popen"])
+        fc_idx = cmd.index("-filter_complex")
+        filter_graph = cmd[fc_idx + 1]
+
+        assert "anullsrc" in filter_graph
+        assert "-map" in cmd
+        assert "[aout]" in cmd
+
+    def test_given_only_second_input_has_audio_when_concat_then_first_side_is_padded_with_silence(
+        self, tmp_path: Path, mock_concat_ffmpeg: dict
+    ) -> None:
+        """Mirror of the above with the silent side swapped: the intro (first
+        input) commonly has no real audio in some pipeline configurations, so
+        the padding logic must work symmetrically regardless of which side
+        lacks an audio stream.
+        """
+        first = tmp_path / "intro.mp4"
+        first.write_bytes(b"fake intro")
+        second = tmp_path / "main.mp4"
+        second.write_bytes(b"fake main")
+        output = tmp_path / "final.mp4"
+
+        meta_first = {**_MOCK_METADATA, "duration": 1.0, "has_audio": False}
+        meta_second = {**_MOCK_METADATA, "duration": 3.0, "has_audio": True}
+        mock_concat_ffmpeg["metadata"].side_effect = [meta_first, meta_second]
+
+        concat_videos(first, second, output)
+
+        cmd = _get_popen_cmd(mock_concat_ffmpeg["popen"])
+        fc_idx = cmd.index("-filter_complex")
+        filter_graph = cmd[fc_idx + 1]
+
+        assert "anullsrc" in filter_graph
+        assert "[aout]" in cmd
+
+    def test_given_neither_input_has_audio_when_concat_then_no_filter_complex_and_video_only_map(
+        self, tmp_path: Path, mock_concat_ffmpeg: dict
+    ) -> None:
+        """When neither side has an audio stream, the command must not claim
+        an audio stream it can't build: no -filter_complex, no -c:a, and the
+        only -map must be the video track from the concat-demuxer input.
+        """
+        first = tmp_path / "intro.mp4"
+        first.write_bytes(b"fake intro")
+        second = tmp_path / "main.mp4"
+        second.write_bytes(b"fake main")
+        output = tmp_path / "final.mp4"
+
+        meta_first = {**_MOCK_METADATA, "has_audio": False}
+        meta_second = {**_MOCK_METADATA, "has_audio": False}
+        mock_concat_ffmpeg["metadata"].side_effect = [meta_first, meta_second]
+
+        concat_videos(first, second, output)
+
+        cmd = _get_popen_cmd(mock_concat_ffmpeg["popen"])
+
+        assert "-filter_complex" not in cmd
+        assert "-c:a" not in cmd
+        assert "[aout]" not in cmd
+        assert "-map" in cmd
+        assert cmd.count("-map") == 1
+        map_idx = cmd.index("-map")
+        assert cmd[map_idx + 1] == "0:v"
+        assert "-c:v" in cmd
+        cv_idx = cmd.index("-c:v")
+        assert cmd[cv_idx + 1] == "copy"
 
 
 # ---------------------------------------------------------------------------
