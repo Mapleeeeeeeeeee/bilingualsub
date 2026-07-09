@@ -60,7 +60,7 @@ cd frontend && pnpm install
 
 ### 前端 (React + Vite)
 
-- **技術棧**: Vite 7 + React 19 + TypeScript 5.9 + Tailwind CSS 4
+- **技術棧**: Vite 8 + React 19 + TypeScript 5.9 + Tailwind CSS 4
 - **狀態管理**: `useJob` hook 管理狀態機：idle → submitting → processing → completed/failed
 - **API 通訊**: `ApiClient` 單例處理 REST 請求和 SSE 連線
 - **國際化**: i18next（預設 zh-TW）
