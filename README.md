@@ -127,13 +127,13 @@ Translate (LLM via Agno) → Bilingual Subtitles (SRT/ASS) → Optional Burn-in 
 
 **Backend**: FastAPI with job-based async architecture. Jobs are created via `POST /api/jobs`, processed in the background, and stream progress updates through `GET /api/jobs/{id}/events` using Server-Sent Events (SSE). Job data is stored in-memory with a 30-minute TTL.
 
-**Frontend**: React SPA built with Vite 7. State management via `useJob` hook (idle → submitting → processing → completed/failed). API communication handled by `ApiClient` singleton with REST and SSE support. Internationalization via i18next.
+**Frontend**: React SPA built with Vite 8. State management via `useJob` hook (idle → submitting → processing → completed/failed). API communication handled by `ApiClient` singleton with REST and SSE support. Internationalization via i18next.
 
 ## Tech Stack
 
 | Backend              | Frontend       |
 | -------------------- | -------------- |
-| FastAPI              | Vite 7         |
+| FastAPI              | Vite 8         |
 | Python 3.11+         | React 19       |
 | yt-dlp               | TypeScript 5.9 |
 | FFmpeg               | Tailwind CSS 4 |

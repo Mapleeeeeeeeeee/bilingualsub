@@ -114,13 +114,13 @@ YouTube 網址 → 下載 (yt-dlp) → 擷取音訊 (FFmpeg) → 語音辨識 (G
 
 **後端**：FastAPI 搭配 job-based 非同步架構。透過 `POST /api/jobs` 建立任務，在背景執行處理，並透過 `GET /api/jobs/{id}/events` 使用 Server-Sent Events (SSE) 串流進度更新。任務資料儲存於記憶體中，TTL 為 30 分鐘。
 
-**前端**：使用 Vite 7 建置的 React SPA。透過 `useJob` hook 管理狀態機（idle → submitting → processing → completed/failed）。API 通訊由 `ApiClient` 單例處理，支援 REST 和 SSE。透過 i18next 實現國際化。
+**前端**：使用 Vite 8 建置的 React SPA。透過 `useJob` hook 管理狀態機（idle → submitting → processing → completed/failed）。API 通訊由 `ApiClient` 單例處理，支援 REST 和 SSE。透過 i18next 實現國際化。
 
 ## 技術棧
 
 | 後端             | 前端           |
 | ---------------- | -------------- |
-| FastAPI          | Vite 7         |
+| FastAPI          | Vite 8         |
 | Python 3.11+     | React 19       |
 | yt-dlp           | TypeScript 5.9 |
 | FFmpeg           | Tailwind CSS 4 |

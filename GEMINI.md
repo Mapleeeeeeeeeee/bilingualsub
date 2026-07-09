@@ -7,7 +7,7 @@
 ### Tech Stack
 
 - **Backend:** Python 3.11+ (FastAPI), AsyncIO, `uv` (dependency management).
-- **Frontend:** React 19, Vite 7, TypeScript 5.9, Tailwind CSS 4.
+- **Frontend:** React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4.
 - **Core Libraries:** `yt-dlp`, `ffmpeg-python`, `groq`, `agno`, `pydantic`.
 - **Testing:** `pytest` (Unit, Integration, E2E w/ Playwright).
 
