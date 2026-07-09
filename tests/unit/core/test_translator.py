@@ -15,6 +15,7 @@ from bilingualsub.core.translator import (
     _build_model,
     _parse_batch_response,
     _parse_retranslate_response,
+    _repair_cjk_split_boundaries,
     retranslate_entries,
     translate_subtitle,
 )
@@ -968,3 +969,28 @@ class TestBuildModel:
 
         assert isinstance(model_arg, OpenAIChat)
         assert model_arg.api_key == _PROXY_PLACEHOLDER_API_KEY
+
+
+@pytest.mark.unit
+class TestCjkBoundaryRepair:
+    def test_repair_cjk_split_boundaries(self):
+        # Test case 1: leading "的問題" with punctuation
+        inputs = [
+            "有一整類以前大家根本不曾想過",
+            "的問題，現在用 Fable 都有機會解決了。",
+        ]
+        expected = [
+            "有一整類以前大家根本不曾想過的問題，",
+            "現在用 Fable 都有機會解決了。",
+        ]
+        assert _repair_cjk_split_boundaries(inputs) == expected
+
+        # Test case 2: leading "的" without punctuation
+        inputs2 = ["我們看到一大類", "的挑戰。"]
+        expected2 = ["我們看到一大類的", "挑戰。"]
+        assert _repair_cjk_split_boundaries(inputs2) == expected2
+
+        # Test case 3: prev has trailing punctuation
+        inputs3 = ["想過，", "的問題，現在用 Fable..."]
+        expected3 = ["想過的問題，", "現在用 Fable..."]
+        assert _repair_cjk_split_boundaries(inputs3) == expected3
