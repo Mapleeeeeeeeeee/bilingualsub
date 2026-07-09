@@ -460,26 +460,42 @@ def _repair_cjk_split_boundaries(translated_texts: list[str]) -> list[str]:
         prev = repaired[idx - 1].strip()
         curr = repaired[idx].strip()
 
+        # Do not repair after strong sentence-ending punctuation
+        if re.search(r"[。？！!?]$", prev):  # noqa: RUF001
+            continue
+
         # Check for leading "的問題" or "的"
         moved_text = ""
         if curr.startswith("的問題"):
             moved_text = "的問題"
-        elif curr.startswith("的"):
+        elif curr.startswith("的") and not curr.startswith(("的確", "的士")):
             moved_text = "的"
 
         if moved_text:
             new_curr = curr[len(moved_text) :].strip()
-            had_leading_punc = bool(re.match(r"^[，。？！、,.:;!?\s]", new_curr))  # noqa: RUF001
-            new_curr = re.sub(r"^[，。？！、,.:;!?\s]+", "", new_curr)  # noqa: RUF001
+
+            # Preserve original leading punctuation (e.g. 。 or ?)
+            punc_match = re.match(r"^([，。？！、,.:;!?\s]+)", new_curr)  # noqa: RUF001
+            leading_punc = punc_match.group(1) if punc_match else ""
+
+            # Strip all leading punctuation from the remainder
+            stripped_curr = re.sub(r"^[，。？！、,.:;!?\s]+", "", new_curr).strip()  # noqa: RUF001
+
+            # Skip repair if the remainder would be empty after stripping punctuation
+            if not stripped_curr:
+                continue
+
+            new_curr = stripped_curr
 
             # Find trailing punctuation in prev
             m = re.search(r"([，。？！、,.:;!?\s]+)$", prev)  # noqa: RUF001
             if m:
                 punc = m.group(1)
                 base_prev = prev[: -len(punc)].strip()
-                repaired[idx - 1] = f"{base_prev}{moved_text}{punc}"
+                final_punc = leading_punc if leading_punc else punc
+                repaired[idx - 1] = f"{base_prev}{moved_text}{final_punc}"
             else:
-                suffix = "，" if had_leading_punc else ""  # noqa: RUF001
+                suffix = leading_punc if leading_punc else ""
                 repaired[idx - 1] = f"{prev}{moved_text}{suffix}"
 
             repaired[idx] = new_curr

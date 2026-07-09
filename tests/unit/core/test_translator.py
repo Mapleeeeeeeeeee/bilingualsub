@@ -994,3 +994,20 @@ class TestCjkBoundaryRepair:
         inputs3 = ["想過，", "的問題，現在用 Fable..."]
         expected3 = ["想過的問題，", "現在用 Fable..."]
         assert _repair_cjk_split_boundaries(inputs3) == expected3
+
+        # Test case 4: no-op for words starting with "的確" or "的士"
+        inputs4 = ["前一句", "的確如此。"]
+        assert _repair_cjk_split_boundaries(inputs4) == inputs4
+
+        # Test case 5: no-op after sentence-ending punctuation
+        inputs5 = ["前一句。", "的確也是這樣。"]
+        assert _repair_cjk_split_boundaries(inputs5) == inputs5
+
+        # Test case 6: no-op when remainder would be empty
+        inputs6 = ["前一句", "的。"]
+        assert _repair_cjk_split_boundaries(inputs6) == inputs6
+
+        # Test case 7: preserve period punctuation
+        inputs7 = ["前文", "的。下一句"]
+        expected7 = ["前文的。", "下一句"]
+        assert _repair_cjk_split_boundaries(inputs7) == expected7
