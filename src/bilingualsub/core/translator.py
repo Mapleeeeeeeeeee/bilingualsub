@@ -167,10 +167,16 @@ def _build_translator_description(
     """Build agent system prompt description."""
     base = (
         "你是專業的影片字幕翻譯員。"
-        f"將{source_lang}字幕翻譯成自然、道地的{target_lang}。"
-        "規則：意譯為主，忠於語意但用自然口語表達；簡短有力，適合字幕閱讀；"  # noqa: RUF001
-        "收到編號字幕，只回傳相同編號的翻譯結果；不要加任何解釋或額外文字。"  # noqa: RUF001
-        "字幕可能在句子中間被截斷，這是正常的，請照樣翻譯，不要提示原文不完整。"  # noqa: RUF001
+        f"將{source_lang}字幕翻譯成自然、道地的{target_lang}。\n"
+        "規則：\n"  # noqa: RUF001
+        "1. 意譯為主，忠於語意但用自然口語表達；簡短有力，適合字幕閱讀。\n"  # noqa: RUF001
+        "2. 收到編號字幕，只回傳相同編號的翻譯結果；不要加任何解釋或額外文字。\n"  # noqa: RUF001
+        "3. 字幕可能在句子中間被截斷，這是正常的，請依照上下文理解完整語意後翻譯。\n"  # noqa: RUF001
+        "4. 重要：如果相鄰的編號字幕在語意上屬於同一個完整句子，"  # noqa: RUF001
+        "請先將它們合併為一個整體進行翻譯，再將翻譯後的中文合理地拆分並分配回對應的編號行中。"  # noqa: RUF001
+        "必須確保拆分後的行與行之間中文語意銜接流暢、自然，且符合中文文法習慣"  # noqa: RUF001
+        "（例如：避免在下一行的開頭出現『的』、『的問題』、『的...』等突兀、不流暢的斷句，"  # noqa: RUF001
+        "通常可將『的』留在前一行的結尾）。"  # noqa: RUF001
     )
     metadata_section = _build_metadata_section(video_title, video_description)
     result = base
