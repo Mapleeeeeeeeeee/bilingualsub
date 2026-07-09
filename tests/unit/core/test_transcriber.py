@@ -620,11 +620,8 @@ class TestSplitLongEntries:
         )
         res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
         assert len(res) == 2
-        assert (
-            res[0].text
-            == "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13"
-        )
-        assert res[1].text == "word14 word15"
+        assert res[0].text == "word1 word2 word3 word4 word5 word6 word7 word8 word9"
+        assert res[1].text == "word10 word11 word12 word13 word14 word15"
 
     def test_splits_long_entry_by_chars_for_cjk(self):
         # Duration 10 seconds, CJK text with no punctuation
@@ -636,8 +633,8 @@ class TestSplitLongEntries:
         )
         res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=15)
         assert len(res) == 2
-        assert res[0].text == "一二三四五六七八九十一二三四五"
-        assert res[1].text == "六七八九十"
+        assert res[0].text == "一二三四五六七八九十一二"
+        assert res[1].text == "三四五六七八九十"
 
     def test_merges_short_clauses_if_within_limits(self):
         # Entry with duration 8 seconds, text has 3 clauses split by commas
