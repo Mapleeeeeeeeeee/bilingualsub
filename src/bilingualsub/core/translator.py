@@ -174,10 +174,9 @@ def _build_translator_description(
         "3. 字幕可能在句子中間被截斷，這是正常的，請依照上下文理解完整語意後翻譯。\n"  # noqa: RUF001
         "4. 重要：如果相鄰的編號字幕在語意上屬於同一個完整句子，"  # noqa: RUF001
         "請先將它們合併為一個整體進行翻譯，再將翻譯後的中文合理地拆分並分配回對應的編號行中。"  # noqa: RUF001
-        "必須確保拆分後的行與行之間中文語意銜接流暢、自然，且符合中文文法習慣。\n"  # noqa: RUF001
-        "5. 絕對限制：中文的結構助詞『的』必須緊貼在修飾語後方，"  # noqa: RUF001
-        "因此絕對禁止將『的』單獨拆分到下一行的開頭，亦禁止在任何行首以『的』、『的問題』、『的...』開頭。"  # noqa: RUF001
-        "若有此狀況，必須將『的』移至上一行的結尾（例如：第一行結尾為『...的』，第二行開頭為『問題...』）。"  # noqa: RUF001
+        "必須確保拆分後的行與行之間中文語意銜接流暢、自然，且符合中文文法習慣"  # noqa: RUF001
+        "（例如：避免在下一行的開頭出現『的』、『的問題』、『的...』等突兀、不流暢的斷句，"  # noqa: RUF001
+        "通常可將『的』留在前一行的結尾）。"  # noqa: RUF001
     )
     metadata_section = _build_metadata_section(video_title, video_description)
     result = base
@@ -445,6 +444,49 @@ def _translate_one_by_one(
     return results
 
 
+def _repair_cjk_split_boundaries(translated_texts: list[str]) -> list[str]:
+    """Repair CJK line-breaking/split boundaries.
+
+    For example:
+    Line 1: "有一整類以前大家根本不曾想過"
+    Line 2: "的問題, 現在用 Fable 都有機會解決了。"
+
+    Will be repaired to:
+    Line 1: "有一整類以前大家根本不曾想過的問題,"
+    Line 2: "現在用 Fable 都有機會解決了。"
+    """
+    repaired = list(translated_texts)
+    for idx in range(1, len(repaired)):
+        prev = repaired[idx - 1].strip()
+        curr = repaired[idx].strip()
+
+        # Check for leading "的問題" or "的"
+        moved_text = ""
+        if curr.startswith("的問題"):
+            moved_text = "的問題"
+        elif curr.startswith("的"):
+            moved_text = "的"
+
+        if moved_text:
+            new_curr = curr[len(moved_text) :].strip()
+            had_leading_punc = bool(re.match(r"^[，。？！、,.:;!?\s]", new_curr))  # noqa: RUF001
+            new_curr = re.sub(r"^[，。？！、,.:;!?\s]+", "", new_curr)  # noqa: RUF001
+
+            # Find trailing punctuation in prev
+            m = re.search(r"([，。？！、,.:;!?\s]+)$", prev)  # noqa: RUF001
+            if m:
+                punc = m.group(1)
+                base_prev = prev[: -len(punc)].strip()
+                repaired[idx - 1] = f"{base_prev}{moved_text}{punc}"
+            else:
+                suffix = "，" if had_leading_punc else ""  # noqa: RUF001
+                repaired[idx - 1] = f"{prev}{moved_text}{suffix}"
+
+            repaired[idx] = new_curr
+
+    return repaired
+
+
 def translate_subtitle(
     subtitle: Subtitle,
     *,
@@ -599,6 +641,9 @@ def translate_subtitle(
             raise TranslationError(
                 f"Failed to translate entries {batch[0].index}-{batch[-1].index}"
             )
+
+    if target_lang.lower().startswith("zh"):
+        translated_texts = _repair_cjk_split_boundaries(translated_texts)
 
     translated_entries = [
         SubtitleEntry(
