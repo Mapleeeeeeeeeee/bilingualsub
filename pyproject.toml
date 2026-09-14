@@ -17,6 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "jieba==0.42.1",
     "yt-dlp>=2024.0.0",
     "groq>=0.11.0",
     "agno>=1.0.0",
@@ -138,6 +139,7 @@ module = [
     "ffmpeg.*",
     "openai.*",
     "google.*",
+    "jieba.*",
 ]
 ignore_missing_imports = true
 

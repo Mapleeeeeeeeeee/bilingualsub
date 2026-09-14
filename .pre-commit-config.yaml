@@ -21,6 +21,7 @@ repos:
         exclude: ^frontend/tsconfig
       - id: check-added-large-files
         args: [--maxkb=1000]
+        exclude: ^src/bilingualsub/formats/data/jieba/dict\.txt\.big$
       - id: check-merge-conflict
       - id: detect-private-key
       - id: no-commit-to-branch

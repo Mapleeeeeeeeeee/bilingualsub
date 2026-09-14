@@ -602,6 +602,41 @@ def test_when_portrait_cue_changes_length_then_bilingual_boundary_stays_compact(
 
 @pytest.mark.unit
 @pytest.mark.parametrize("style", ["Translated", "Original"])
+@pytest.mark.parametrize(
+    ("text", "protected_words"),
+    [
+        ("我花了很多心力建立確定性的工具，", ["建立", "確定性", "工具"]),
+        (
+            "每個 agent 都要建立測試並確認結果。",
+            ["每個", "建立", "測試", "確認", "結果"],
+        ),
+    ],
+)
+def test_when_portrait_wraps_chinese_then_word_boundaries_are_preserved(
+    style: str, text: str, protected_words: list[str]
+) -> None:
+    """Regression: portrait wrapping splits Chinese words such as 建立 (d94c459)."""
+    subtitle = Subtitle(
+        entries=[
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=1),
+                end=timedelta(seconds=5),
+                text=text,
+            )
+        ]
+    )
+    result = serialize_bilingual_ass(
+        subtitle, subtitle, video_width=720, video_height=1280
+    )
+    rendered_text = _dialogue_text(result, style)
+    for word in protected_words:
+        assert word in rendered_text
+    assert "".join(rendered_text.replace(r"\N", "").split()) == "".join(text.split())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("style", ["Translated", "Original"])
 def test_given_portrait_video_long_subtitles_wrap_more_than_landscape(
     long_bilingual_pair: tuple[Subtitle, Subtitle], style: str
 ) -> None:
