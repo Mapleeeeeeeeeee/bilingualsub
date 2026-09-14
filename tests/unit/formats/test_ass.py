@@ -221,8 +221,8 @@ class TestSerializeBilingualASS:
         assert "Dialogue: 0,1:30:45.12,2:45:30.45,Original" in result
         assert "{\\an8\\pos(960,967)\\fs26\\q2}Long duration" in result
 
-    def test_serialize_uses_fixed_playres_regardless_of_input(self):
-        """Test that PlayRes is always 1920x1080 regardless of input resolution."""
+    def test_serialize_preserves_landscape_playres_at_different_resolutions(self):
+        """16:9 video keeps the established 1920x1080 subtitle canvas."""
         original = Subtitle(
             entries=[
                 SubtitleEntry(
@@ -498,3 +498,146 @@ class TestSerializeBilingualASS:
         assert original_dialogue.count("\\N") + 1 == expected_original_lines
         assert original_y > translated_y + translated_size
         assert original_y + expected_original_lines * original_size <= 1080 - 30
+
+
+@pytest.fixture
+def long_bilingual_pair() -> tuple[Subtitle, Subtitle]:
+    def subtitle(text: str) -> Subtitle:
+        return Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(seconds=1),
+                    end=timedelta(seconds=5),
+                    text=text,
+                )
+            ]
+        )
+
+    return (
+        subtitle(
+            "When we explain software architecture, we should describe how a "
+            "request moves through the system and why each component exists, "
+            "so the next person can understand the decisions behind the code."
+        ),
+        subtitle(
+            "說明軟體架構時，我們應該描述請求如何經過系統，以及每個元件存在的原因，"
+            "讓下一位維護者能夠理解程式碼背後的設計決策。"
+        ),
+    )
+
+
+def _canvas_size(result: str) -> tuple[int, int]:
+    width = re.search(r"^PlayResX: (\d+)$", result, re.MULTILINE)
+    height = re.search(r"^PlayResY: (\d+)$", result, re.MULTILINE)
+    assert width is not None and height is not None
+    return int(width.group(1)), int(height.group(1))
+
+
+def _dialogue_text(result: str, style: str) -> str:
+    dialogue = next(
+        line
+        for line in result.splitlines()
+        if line.startswith("Dialogue:") and line.split(",", 9)[3] == style
+    )
+    return dialogue.split(",", 9)[9].split("}", 1)[1]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("style", ["Translated", "Original"])
+def test_given_portrait_video_long_subtitles_wrap_more_than_landscape(
+    long_bilingual_pair: tuple[Subtitle, Subtitle], style: str
+) -> None:
+    """Regression: portrait videos reuse landscape subtitle wrapping (68ce84f)."""
+    landscape = serialize_bilingual_ass(
+        *long_bilingual_pair, video_width=1920, video_height=1080
+    )
+    portrait = serialize_bilingual_ass(
+        *long_bilingual_pair, video_width=720, video_height=1280
+    )
+
+    assert _dialogue_text(portrait, style).count(r"\N") > _dialogue_text(
+        landscape, style
+    ).count(r"\N")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("video_width", "video_height"),
+    [(720, 1280), (1080, 1920), (1080, 1080), (1440, 1080), (1920, 1080)],
+)
+def test_given_video_shape_subtitles_keep_proportions_and_centered_complete_pair(
+    long_bilingual_pair: tuple[Subtitle, Subtitle],
+    video_width: int,
+    video_height: int,
+) -> None:
+    """Regression: subtitle canvas ignores portrait and square video shape (68ce84f)."""
+    result = serialize_bilingual_ass(
+        *long_bilingual_pair, video_width=video_width, video_height=video_height
+    )
+    canvas_width, canvas_height = _canvas_size(result)
+    assert canvas_width == pytest.approx(
+        canvas_height * video_width / video_height, abs=1
+    )
+
+    for style, subtitle in zip(
+        ("Original", "Translated"), long_bilingual_pair, strict=True
+    ):
+        x, y, font_size = _dialogue_position(result, style)
+        assert x == pytest.approx(canvas_width / 2, abs=1)
+        text = _dialogue_text(result, style)
+        assert "".join(text.replace(r"\N", " ").split()) == "".join(
+            subtitle.entries[0].text.split()
+        )
+        assert 0 <= y < canvas_height
+        assert y + (text.count(r"\N") + 1) * font_size < canvas_height
+
+    _, translated_y, translated_size = _dialogue_position(result, "Translated")
+    _, original_y, _ = _dialogue_position(result, "Original")
+    translated_lines = _dialogue_text(result, "Translated").count(r"\N") + 1
+    assert translated_y + translated_lines * translated_size < original_y
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("first_size", "second_size"),
+    [((720, 1280), (1080, 1920)), ((1280, 720), (3840, 2160))],
+)
+def test_given_same_aspect_ratio_resolution_does_not_change_subtitle_layout(
+    long_bilingual_pair: tuple[Subtitle, Subtitle],
+    first_size: tuple[int, int],
+    second_size: tuple[int, int],
+) -> None:
+    """Equivalent video shapes retain matching line breaks and visual placement."""
+    first = serialize_bilingual_ass(
+        *long_bilingual_pair, video_width=first_size[0], video_height=first_size[1]
+    )
+    second = serialize_bilingual_ass(
+        *long_bilingual_pair, video_width=second_size[0], video_height=second_size[1]
+    )
+    first_width, first_height = _canvas_size(first)
+    second_width, second_height = _canvas_size(second)
+    for style in ("Translated", "Original"):
+        assert _dialogue_text(first, style) == _dialogue_text(second, style)
+        first_x, first_y, first_font = _dialogue_position(first, style)
+        second_x, second_y, second_font = _dialogue_position(second, style)
+        assert first_x / first_width == pytest.approx(second_x / second_width)
+        assert first_y / first_height == pytest.approx(second_y / second_height)
+        assert first_font / first_height == pytest.approx(second_font / second_height)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("video_width", "video_height"),
+    [(0, 1080), (-1, 1080), (1920, 0), (1920, -1), (0, 0)],
+)
+def test_given_nonpositive_video_dimension_serialization_raises_value_error(
+    long_bilingual_pair: tuple[Subtitle, Subtitle],
+    video_width: int,
+    video_height: int,
+) -> None:
+    """Video dimensions must be positive before a subtitle canvas can be created."""
+    with pytest.raises(ValueError, match="Video dimensions must be positive"):
+        serialize_bilingual_ass(
+            *long_bilingual_pair, video_width=video_width, video_height=video_height
+        )

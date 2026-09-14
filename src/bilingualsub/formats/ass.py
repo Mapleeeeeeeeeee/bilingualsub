@@ -37,15 +37,15 @@ def serialize_bilingual_ass(
         ASS format string with bilingual subtitles
 
     Raises:
-        ValueError: If subtitles have mismatched number of entries
-
-    Note:
-        video_width and video_height parameters are accepted for API compatibility
-        but no longer used internally. PlayRes is fixed at 1920x1080 for consistent
-        rendering across all video resolutions.
+        ValueError: If video dimensions are not positive or subtitles have
+            mismatched numbers of entries.
     """
-    # Kept for API compatibility - suppress vulture warnings
-    _ = (video_width, video_height)
+    if video_width <= 0 or video_height <= 0:
+        raise ValueError("Video dimensions must be positive")
+
+    # libass scales glyphs by PlayResY on both axes, so only the canvas width
+    # follows the aspect ratio to preserve font proportions and relative size.
+    play_res_x = max(1, round(_PLAY_RES_Y * video_width / video_height))
 
     if len(original.entries) != len(translated.entries):
         raise ValueError(
@@ -81,8 +81,8 @@ def serialize_bilingual_ass(
     header = f"""[Script Info]
 Title: Bilingual Subtitle
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: {play_res_x}
+PlayResY: {_PLAY_RES_Y}
 
 [V4+ Styles]
 {style_format}
@@ -102,7 +102,9 @@ PlayResY: 1080
         start_time = _format_ass_time(orig_entry.start)
         end_time = _format_ass_time(orig_entry.end)
 
-        layout = _layout_bilingual_pair(trans_entry.text, orig_entry.text)
+        layout = _layout_bilingual_pair(
+            trans_entry.text, orig_entry.text, play_res_x=play_res_x
+        )
 
         # Add translated line (top of the grouped subtitle block)
         trans_text = _escape_ass_text(layout.translated_text)
@@ -140,14 +142,17 @@ class _SubtitleLayout:
     original_y: int
 
 
-def _layout_bilingual_pair(translated_text: str, original_text: str) -> _SubtitleLayout:
+def _layout_bilingual_pair(
+    translated_text: str, original_text: str, *, play_res_x: int
+) -> _SubtitleLayout:
     """Return wrapped text and top-anchored positions for one bilingual pair."""
     best_layout: _SubtitleLayout | None = None
+    max_width = _SUBTITLE_MAX_WIDTH * play_res_x / _PLAY_RES_X
     for trans_size, orig_size in zip(
         _TRANSLATED_FONT_SIZES, _ORIGINAL_FONT_SIZES, strict=True
     ):
-        trans_wrapped = _wrap_text(translated_text, trans_size)
-        orig_wrapped = _wrap_text(original_text, orig_size)
+        trans_wrapped = _wrap_text(translated_text, trans_size, max_width=max_width)
+        orig_wrapped = _wrap_text(original_text, orig_size, max_width=max_width)
         trans_lines = trans_wrapped.count("\n") + 1
         orig_lines = orig_wrapped.count("\n") + 1
         trans_height = ceil(trans_lines * trans_size * _TRANSLATED_LINE_HEIGHT)
@@ -165,7 +170,7 @@ def _layout_bilingual_pair(translated_text: str, original_text: str) -> _Subtitl
             original_text=orig_wrapped,
             translated_font_size=trans_size,
             original_font_size=orig_size,
-            x=_PLAY_RES_X // 2,
+            x=play_res_x // 2,
             translated_y=trans_y,
             original_y=trans_y + trans_height + _SUBTITLE_LINE_GAP,
         )
@@ -178,7 +183,7 @@ def _layout_bilingual_pair(translated_text: str, original_text: str) -> _Subtitl
     return best_layout
 
 
-def _wrap_text(text: str, font_size: int) -> str:
+def _wrap_text(text: str, font_size: int, *, max_width: float) -> str:
     """Wrap text to a rough ASS pixel width using language-aware units."""
     lines = []
     for raw_line in text.splitlines() or [""]:
@@ -187,7 +192,7 @@ def _wrap_text(text: str, font_size: int) -> str:
         current_width = 0.0
         for unit in units:
             unit_width = _estimate_text_width(unit, font_size)
-            if current and current_width + unit_width > _SUBTITLE_MAX_WIDTH:
+            if current and current_width + unit_width > max_width:
                 lines.append(current.rstrip())
                 current = unit.lstrip()
                 current_width = _estimate_text_width(current, font_size)

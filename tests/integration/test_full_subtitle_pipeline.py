@@ -216,50 +216,57 @@ class TestFullSubtitlePipeline:
         # Verify dialogue line format
         assert "Dialogue: 0," in written
 
-    def test_ass_output_uses_fixed_playres_regardless_of_video_resolution(
+    @pytest.mark.parametrize(
+        ("width", "height", "expected_canvas_width", "expected_center"),
+        [
+            (1920, 1080, 1920, 960),
+            (1280, 720, 1920, 960),
+            (3840, 2160, 1920, 960),
+            (854, 480, 1922, 961),
+            (720, 1280, 608, 304),
+            (1080, 1920, 608, 304),
+        ],
+    )
+    def test_given_video_dimensions_pipeline_preserves_subtitle_aspect_ratio(
         self,
         tmp_path: Path,
         set_fake_api_key: None,
         sample_whisper_api_response,
+        width: int,
+        height: int,
+        expected_canvas_width: int,
+        expected_center: int,
     ) -> None:
-        """PlayRes is fixed at 1920x1080 for consistent rendering, regardless of input resolution."""
-        resolutions = [
-            (1920, 1080, "1080p"),
-            (1280, 720, "720p"),
-            (3840, 2160, "4K"),
-            (854, 480, "480p"),
+        """Regression: pipeline flattens portrait subtitle canvases to 16:9 (68ce84f)."""
+        video_path = tmp_path / "video.mp4"
+
+        dl_patches = _patch_downloader(video_path, width=width, height=height)
+        with dl_patches[0], dl_patches[1], dl_patches[2]:
+            metadata = download_video(YOUTUBE_URL, video_path)
+
+        assert metadata.width == width
+        assert metadata.height == height
+
+        audio_path = tmp_path / "audio.mp3"
+        audio_path.write_bytes(b"fake audio content")
+
+        with _patch_transcriber(sample_whisper_api_response):
+            original = transcribe_audio(audio_path)
+
+        with _patch_translator(list(CHINESE_TRANSLATIONS)):
+            translated = translate_subtitle(original)
+
+        ass_content = serialize_bilingual_ass(
+            original,
+            translated,
+            video_width=metadata.width,
+            video_height=metadata.height,
+        )
+
+        assert f"PlayResX: {expected_canvas_width}\n" in ass_content
+        assert "PlayResY: 1080\n" in ass_content
+        dialogues = [
+            line for line in ass_content.splitlines() if line.startswith("Dialogue:")
         ]
-
-        for width, height, label in resolutions:
-            video_path = tmp_path / f"video_{label}.mp4"
-
-            dl_patches = _patch_downloader(video_path, width=width, height=height)
-            with dl_patches[0], dl_patches[1], dl_patches[2]:
-                metadata = download_video(YOUTUBE_URL, video_path)
-
-            assert metadata.width == width, f"{label}: width mismatch"
-            assert metadata.height == height, f"{label}: height mismatch"
-
-            # Use pre-built subtitle fixtures instead of re-mocking transcriber
-            audio_path = tmp_path / f"audio_{label}.mp3"
-            audio_path.write_bytes(b"fake audio content")
-
-            with _patch_transcriber(sample_whisper_api_response):
-                original = transcribe_audio(audio_path)
-
-            with _patch_translator(list(CHINESE_TRANSLATIONS)):
-                translated = translate_subtitle(original)
-
-            ass_content = serialize_bilingual_ass(
-                original,
-                translated,
-                video_width=metadata.width,
-                video_height=metadata.height,
-            )
-
-            assert "PlayResX: 1920" in ass_content, (
-                f"{label}: PlayResX should always be 1920"
-            )
-            assert "PlayResY: 1080" in ass_content, (
-                f"{label}: PlayResY should always be 1080"
-            )
+        assert len(dialogues) == len(original.entries) + len(translated.entries)
+        assert all(rf"\pos({expected_center}," in line for line in dialogues)
