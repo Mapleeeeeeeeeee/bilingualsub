@@ -38,6 +38,7 @@ from bilingualsub.core import (
     transcribe_audio,
     translate_subtitle,
 )
+from bilingualsub.core.segmentation import split_at_phrase_boundaries
 from bilingualsub.core.subtitle_fetcher import fetch_manual_subtitle
 from bilingualsub.formats import parse_srt, serialize_bilingual_ass, serialize_srt
 from bilingualsub.utils import (
@@ -51,6 +52,9 @@ from bilingualsub.utils import (
 )
 
 logger = structlog.get_logger()
+
+_PORTRAIT_CUE_TARGET_DURATION_SECONDS = 4.0
+_PORTRAIT_CUE_TARGET_CHARACTERS = 60
 
 # Maps core errors to (error_code, user_message) for PipelineError
 _ERROR_MAP: dict[type, tuple[str, str]] = {
@@ -518,6 +522,9 @@ async def run_subtitle(job: Job) -> None:
         if not isinstance(original_sub, Subtitle):
             raise PipelineError("transcription_failed", "Failed to obtain subtitles")
 
+        if job.video_width < job.video_height:
+            original_sub = _segment_portrait_subtitle(original_sub)
+
         _send_progress(
             job,
             JobStatus.TRANSLATING,
@@ -563,6 +570,20 @@ async def run_subtitle(job: Job) -> None:
             error_code=pipeline_err.code,
             error=str(exc),
         )
+
+
+def _segment_portrait_subtitle(subtitle: Subtitle) -> Subtitle:
+    """Shorten source cues before translation; inner timings approximate text length.
+
+    Existing cue boundaries and gaps are retained. Split times are not word-aligned.
+    """
+    return Subtitle(
+        entries=split_at_phrase_boundaries(
+            subtitle.entries,
+            max_duration_sec=_PORTRAIT_CUE_TARGET_DURATION_SECONDS,
+            max_chars=_PORTRAIT_CUE_TARGET_CHARACTERS,
+        )
+    )
 
 
 _BURN_PROGRESS_END = 80.0

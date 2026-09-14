@@ -6,6 +6,72 @@ from datetime import timedelta
 from bilingualsub.core.subtitle import SubtitleEntry
 
 
+def split_at_phrase_boundaries(
+    entries: list[SubtitleEntry],
+    *,
+    max_duration_sec: float,
+    max_chars: int,
+) -> list[SubtitleEntry]:
+    """Split long cues at conservative punctuation or English clause boundaries.
+
+    Limits are targets: text with no eligible boundary remains intact. Clause
+    detection is heuristic, not grammatical parsing. Inner times are estimated
+    from text length; source cue boundaries and gaps remain unchanged.
+    """
+    result: list[SubtitleEntry] = []
+    for entry in entries:
+        pending = [entry]
+        while pending:
+            current = pending.pop()
+            duration = (current.end - current.start).total_seconds()
+            if duration <= max_duration_sec and len(current.text) <= max_chars:
+                result.append(current)
+                continue
+            boundaries = [
+                match.end()
+                for match in re.finditer(
+                    r"(?:[.!?,;](?:\s+|$)|[\u3002\uff01\uff1f\u3001\uff0c\uff1b]\s*)",
+                    current.text,
+                )
+            ]
+            boundaries.extend(
+                match.start()
+                for match in re.finditer(
+                    r"\b(?:that|which|who|where|when|because|although|while|and|or|but)\b",
+                    current.text,
+                    flags=re.IGNORECASE,
+                )
+            )
+            candidates = [
+                boundary
+                for boundary in boundaries
+                if not _is_short_text(current.text[:boundary].strip(), 3, 6)
+                and not _is_short_text(current.text[boundary:].strip(), 3, 6)
+            ]
+            if not candidates:
+                result.append(current)
+                continue
+            target_length = min(
+                max_chars, len(current.text) * max_duration_sec / duration
+            )
+            boundary = min(candidates, key=lambda value: abs(value - target_length))
+            left = current.text[:boundary].strip()
+            right = current.text[boundary:].strip()
+            split_time = current.start + (current.end - current.start) * (
+                len(left) / (len(left) + len(right))
+            )
+            pending.extend(
+                [
+                    SubtitleEntry(1, split_time, current.end, right),
+                    SubtitleEntry(1, current.start, split_time, left),
+                ]
+            )
+    return [
+        SubtitleEntry(index, entry.start, entry.end, entry.text)
+        for index, entry in enumerate(result, start=1)
+    ]
+
+
 def _has_cjk(text: str) -> bool:
     """Check if the text contains CJK characters (Chinese, Japanese, or Korean)."""
     return any(

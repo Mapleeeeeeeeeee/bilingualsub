@@ -4,6 +4,7 @@ import json
 import subprocess  # nosec B404
 import sys
 import tempfile
+import unicodedata
 import uuid
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -516,6 +517,52 @@ def split_audio(
     return chunks
 
 
+def _wrap_intro_text(text: str, max_units: float) -> str:
+    """Wrap text at spaces or URL separators, retaining all non-space characters."""
+
+    def text_width(value: str) -> float:
+        return sum(
+            1.0 if unicodedata.east_asian_width(char) in "WF" else 0.6 for char in value
+        )
+
+    lines: list[str] = []
+    for paragraph in text.replace(" - ", " -\n").split("\n"):
+        paragraph_start = len(lines)
+        remaining = paragraph
+        while remaining:
+            units = 0.0
+            break_at = 0
+            for index, char in enumerate(remaining):
+                # Font fallback can change glyph advances; leave room for Latin glyphs.
+                units += 1.0 if unicodedata.east_asian_width(char) in "WF" else 0.6
+                if units > max_units and index:
+                    split_at = break_at or index
+                    lines.append(remaining[:split_at].rstrip())
+                    remaining = remaining[split_at:].lstrip()
+                    break
+                if char.isspace() or char == "/":
+                    break_at = index + 1
+            else:
+                lines.append(remaining)
+                break
+        if not paragraph:
+            lines.append("")
+        for index in range(len(lines) - 1, paragraph_start, -1):
+            previous, current = lines[index - 1], lines[index]
+            while " " in previous:
+                shortened, _, word = previous.rpartition(" ")
+                expanded = f"{word} {current}"
+                if text_width(expanded) > max_units:
+                    break
+                old_difference = abs(text_width(previous) - text_width(current))
+                new_difference = abs(text_width(shortened) - text_width(expanded))
+                if new_difference >= old_difference:
+                    break
+                previous, current = shortened, expanded
+            lines[index - 1], lines[index] = previous, current
+    return "\n".join(lines)
+
+
 def generate_intro(  # noqa: PLR0915
     output_path: Path,
     *,
@@ -535,6 +582,10 @@ def generate_intro(  # noqa: PLR0915
     support hardware-accelerated encoding paths on macOS.
     """
     left_margin = int(width * 0.10)
+    is_portrait = height > width
+    portrait_scale = min(width / 720, height / 1280)
+    portrait_y = int(height * 0.22)
+    portrait_blocks: list[Callable[[float], str]] = []
 
     # Each text layer fades in 0.3 s after the previous; earliest at t=0.3
     fade_step = 0.3
@@ -552,25 +603,63 @@ def generate_intro(  # noqa: PLR0915
         y: str,
         enable_expr: str,
         fade_start: float,
+        *,
+        portrait_fontsize: int = 23,
+        portrait_line_height: int = 30,
+        portrait_gap: int = 0,
     ) -> str:
         """Build a drawtext filter block.
 
         ``font_spec`` is the output of ``_font_arg()`` — either
         ``fontfile='<path>'`` or ``font='<name>'``.
         """
-        safe = _escape_drawtext(text)
+        nonlocal portrait_y
+        lines = [text]
+        line_height = 0
+        if is_portrait:
+            fontsize = max(1, int(portrait_fontsize * portrait_scale))
+            if x == str(left_margin):
+                text = _wrap_intro_text(text, (width - 2 * left_margin) / fontsize)
+                lines = text.split("\n")
+                y = str(portrait_y)
+                line_height = max(fontsize, int(portrait_line_height * portrait_scale))
+                portrait_y += (
+                    text.count("\n") * line_height
+                    + fontsize
+                    + int(portrait_gap * portrait_scale)
+                )
         alpha_expr = f"if(lt(t,{fade_start:.1f}),0,min((t-{fade_start:.1f})/0.3,1))"
-        return (
-            f"drawtext=text='{safe}'"
-            f":{font_spec}"
-            f":fontsize={fontsize}"
-            f":fontcolor={fontcolor}"
-            f":x={x}"
-            f":y={y}"
-            f":alpha='{alpha_expr}'"
-            f":enable='{enable_expr}'"
-            ":fix_bounds=1"
-        )
+
+        def render(fit_scale: float) -> str:
+            fits_content = is_portrait and x == str(left_margin)
+            fitted_size = (
+                max(1, int(fontsize * fit_scale)) if fits_content else fontsize
+            )
+            rendered: list[str] = []
+            for index, line in enumerate(lines):
+                line_y = y
+                if fits_content:
+                    top = int(height * 0.22)
+                    line_y = str(
+                        top + int((int(y) + index * line_height - top) * fit_scale)
+                    )
+                rendered.append(
+                    f"drawtext=text='{_escape_drawtext(line)}'"
+                    f":{font_spec}"
+                    f":fontsize={fitted_size}"
+                    f":fontcolor={fontcolor}"
+                    f":x={x}"
+                    f":y={line_y}"
+                    f":alpha='{alpha_expr}'"
+                    f":enable='{enable_expr}'"
+                    ":fix_bounds=1"
+                )
+            return ",".join(rendered)
+
+        if is_portrait:
+            portrait_blocks.append(render)
+            return ""
+        return render(1.0)
 
     # Y positions: vertically centered with generous spacing
     # Total content height ~50% of frame, starting at ~28%
@@ -611,6 +700,7 @@ def generate_intro(  # noqa: PLR0915
             str(y_eyebrow),
             _block_enable(_start),
             _start,
+            portrait_gap=28,
         )
     )
 
@@ -626,6 +716,9 @@ def generate_intro(  # noqa: PLR0915
             str(y_chinese_label),
             _block_enable(_start),
             _start,
+            portrait_fontsize=30,
+            portrait_line_height=40,
+            portrait_gap=34,
         )
     )
 
@@ -641,6 +734,9 @@ def generate_intro(  # noqa: PLR0915
             str(y_channel),
             _block_enable(_start),
             _start,
+            portrait_fontsize=60,
+            portrait_line_height=78,
+            portrait_gap=32,
         )
     )
 
@@ -657,6 +753,9 @@ def generate_intro(  # noqa: PLR0915
                 str(y_channel_url),
                 _block_enable(_start),
                 _start,
+                portrait_fontsize=25,
+                portrait_line_height=32,
+                portrait_gap=24,
             )
         )
 
@@ -672,6 +771,9 @@ def generate_intro(  # noqa: PLR0915
             str(y_title),
             _block_enable(_start),
             _start,
+            portrait_fontsize=32,
+            portrait_line_height=42,
+            portrait_gap=32,
         )
     )
 
@@ -687,6 +789,9 @@ def generate_intro(  # noqa: PLR0915
             str(y_video_url),
             _block_enable(_start),
             _start,
+            portrait_fontsize=25,
+            portrait_line_height=32,
+            portrait_gap=43,
         )
     )
 
@@ -709,6 +814,9 @@ def generate_intro(  # noqa: PLR0915
                 str(y_pos),
                 _block_enable(decl_zh_start),
                 decl_zh_start,
+                portrait_fontsize=28,
+                portrait_line_height=38,
+                portrait_gap=30 if y_pos == decl_zh_y[-1] else 10,
             )
         )
 
@@ -731,6 +839,7 @@ def generate_intro(  # noqa: PLR0915
                 str(y_pos),
                 _block_enable(decl_en_start),
                 decl_en_start,
+                portrait_gap=7,
             )
         )
 
@@ -747,6 +856,14 @@ def generate_intro(  # noqa: PLR0915
             fade_step,
         )
     )
+
+    if is_portrait:
+        content_top = int(height * 0.22)
+        content_bottom = int(height * 0.88)
+        fit_scale = min(
+            1.0, (content_bottom - content_top) / (portrait_y - content_top)
+        )
+        blocks = [render(fit_scale) for render in portrait_blocks]
 
     fade_out_start = duration - 0.5
     drawtext_chain = ",".join(blocks)

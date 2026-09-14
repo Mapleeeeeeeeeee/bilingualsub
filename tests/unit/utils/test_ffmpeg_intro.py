@@ -1,5 +1,6 @@
 """Unit tests for generate_intro, concat_videos, and burn_subtitles watermark branch."""
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -181,6 +182,100 @@ class TestBurnSubtitlesWatermark:
 @pytest.mark.unit
 class TestGenerateIntro:
     """Tests for generate_intro."""
+
+    def test_when_portrait_has_long_metadata_then_content_stays_above_brand(
+        self, tmp_path: Path, mock_intro_ffmpeg: dict
+    ) -> None:
+        """Regression: wrapped portrait metadata overlaps bottom branding (6e50ae3)."""
+        generate_intro(
+            tmp_path / "intro.mp4",
+            width=720,
+            height=1280,
+            fps=30.0,
+            channel="The Software Engineering and Architecture Discussion Channel",
+            channel_url="https://www.youtube.com/@SoftwareEngineeringDiscussions",
+            video_title=(
+                "A practical discussion of software engineering - "
+                "Designing maintainable systems and evaluating architecture decisions "
+                "with experienced software development teams"
+            ),
+            video_url="https://www.youtube.com/watch?v=example123456789",
+        )
+        command = _get_popen_cmd(mock_intro_ffmpeg["popen"])
+        filters = command[command.index("-vf") + 1]
+        content = re.findall(
+            r":fontsize=(\d+):fontcolor=white@[\d.]+:x=72:y=(\d+):", filters
+        )
+        assert content
+        assert max(int(y) + int(size) for size, y in content) < 1152
+
+    @pytest.mark.parametrize("width,height", [(720, 1280), (1080, 1920)])
+    def test_when_portrait_then_long_attribution_wraps_without_changing_original_design(
+        self, tmp_path: Path, mock_intro_ffmpeg: dict, width: int, height: int
+    ) -> None:
+        """Regression: portrait intro clips long title and source URL (6e50ae3)."""
+        channel = "Uncle Bob Martin"
+        title = "Uncle Bob Martin - Morning Bathrobe Rant Rethinking Harnesses"
+        url = "https://x.com/unclebobmartin/status/2098744156709441896"
+        generate_intro(
+            tmp_path / "intro.mp4",
+            width=width,
+            height=height,
+            fps=30.0,
+            channel=channel,
+            video_title=title,
+            video_url=url,
+        )
+        command = _get_popen_cmd(mock_intro_ffmpeg["popen"])
+        filters = command[command.index("-vf") + 1]
+        layers = re.findall(
+            r"drawtext=text='(.*?)':(?:fontfile|font)=.*?:fontsize=(\d+)"
+            r":fontcolor=(white@[\d.]+):x=([^:]+):y=([^:]+):.*?alpha=",
+            filters,
+            re.DOTALL,
+        )
+        expected_blocks = [
+            ("white@0.3", "ORIGINAL VIDEO FROM"),
+            ("white@0.6", "原始影片來自"),
+            ("white@1.0", channel),
+            ("white@0.7", title),
+            ("white@0.5", url),
+            (
+                "white@0.45",
+                "翻譯字幕使用開源專案 BilingualSub 製作"
+                "所有內容及著作權屬於原始創作者所有"
+                "如需移除，請聯繫上傳者",
+            ),
+            (
+                "white@0.35",
+                "Subtitles created with BilingualSub (open source)"
+                "All content and copyrights belong to the original creator"
+                "For removal requests, please contact the uploader",
+            ),
+            ("white@0.25", "BilingualSub"),
+        ]
+        colors_in_order = list(dict.fromkeys(layer[2] for layer in layers))
+        assert colors_in_order == [color for color, _ in expected_blocks]
+        for color, expected_text in expected_blocks:
+            rendered_lines = [
+                line
+                for text, _, layer_color, _, _ in layers
+                if layer_color == color
+                for line in text.splitlines()
+            ]
+            assert "".join("".join(rendered_lines).split()) == "".join(
+                _escape_drawtext(expected_text).split()
+            )
+            if color in {"white@0.7", "white@0.5"}:
+                assert len(rendered_lines) >= 2, "Long attribution must wrap"
+            if color in {"white@0.7", "white@0.35"}:
+                assert all(len(line.split()) > 1 for line in rendered_lines), (
+                    "Wrapped English must not leave a short word alone"
+                )
+        sizes = {color: int(size) for _, size, color, _, _ in layers}
+        assert sizes["white@1.0"] > sizes["white@0.7"] > sizes["white@0.5"]
+        assert "fade=t=out:st=4.50:d=0.5" in filters
+        assert f"color=c=black:s={width}x{height}:r=30.0:d=5.0" in command
 
     def test_when_channel_url_given_then_cmd_contains_color_source_and_channel_url(
         self, tmp_path: Path, mock_intro_ffmpeg: dict

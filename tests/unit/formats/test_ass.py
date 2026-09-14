@@ -2,6 +2,7 @@
 
 import re
 from datetime import timedelta
+from math import ceil
 
 import pytest
 
@@ -12,11 +13,15 @@ from bilingualsub.formats.ass import serialize_bilingual_ass
 def _dialogue_position(result: str, style: str) -> tuple[int, int, int]:
     match = re.search(
         rf"Dialogue: 0,[^,]+,[^,]+,{style},,0,0,0,,"
-        rf"\{{\\an8\\pos\((\d+),(\d+)\)\\fs(\d+)\\q2\}}",
+        rf"\{{\\an([28])\\pos\((\d+),(\d+)\)\\fs(\d+)\\q2\}}",
         result,
     )
     assert match is not None
-    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+    alignment, x, y, size = map(int, match.groups())
+    if alignment == 2:
+        line_count = _dialogue_text(result, style).count(r"\N") + 1
+        y -= ceil(line_count * size * 1.18)
+    return x, y, size
 
 
 class TestSerializeBilingualASS:
@@ -541,6 +546,58 @@ def _dialogue_text(result: str, style: str) -> str:
         if line.startswith("Dialogue:") and line.split(",", 9)[3] == style
     )
     return dialogue.split(",", 9)[9].split("}", 1)[1]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("original_text", "translated_text", "expected_translated_lines"),
+    [
+        ("that each agent would use", "供每個 agent 使用，", ["供每個 agent 使用，"]),
+        (
+            "I worked very hard on establishing the deterministic tools",
+            "我同樣花了很多心力，建立確定性工具，",
+            ["我同樣花了很多心力，", "建立確定性工具，"],
+        ),
+    ],
+)
+def test_when_portrait_cue_changes_length_then_bilingual_boundary_stays_compact(
+    original_text: str, translated_text: str, expected_translated_lines: list[str]
+) -> None:
+    """Regression: portrait bilingual text shifts and has excessive gap (6e50ae3)."""
+    subtitles = [
+        Subtitle(
+            entries=[
+                SubtitleEntry(
+                    index=1,
+                    start=timedelta(milliseconds=550),
+                    end=timedelta(milliseconds=4410),
+                    text=text,
+                )
+            ]
+        )
+        for text in (original_text, translated_text)
+    ]
+    result = serialize_bilingual_ass(*subtitles, video_width=720, video_height=1280)
+    translated = re.search(r"\\an2\\pos\(304,(\d+)\)\\fs(\d+)", result)
+    assert translated is not None, "Chinese lines should grow above a stable boundary"
+    _, original_y, original_size = _dialogue_position(result, "Original")
+    translated_bottom, translated_size = map(int, translated.groups())
+    assert 935 <= translated_bottom <= 940
+    assert 8 <= original_y - translated_bottom <= 12
+    assert translated_size == 37
+    assert original_size == 29
+    assert (
+        _dialogue_text(result, "Translated").split(r"\N") == expected_translated_lines
+    )
+    assert "&H0000FFFF" in result
+    assert "&H00909090" in result
+    for style, expected_text in zip(
+        ("Original", "Translated"), (original_text, translated_text), strict=True
+    ):
+        assert f"Dialogue: 0,0:00:00.55,0:00:04.41,{style}," in result
+        assert "".join(_dialogue_text(result, style).replace(r"\N", "").split()) == (
+            "".join(expected_text.split())
+        )
 
 
 @pytest.mark.unit
