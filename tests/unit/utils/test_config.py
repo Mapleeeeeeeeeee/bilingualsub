@@ -94,7 +94,7 @@ class TestGetGroqApiKey:
         assert result == "valid-api-key-xyz"
 
     def test_raises_error_when_key_not_set(self, monkeypatch, no_env_file):
-        """Should raise ValueError when GROQ_API_KEY not set."""
+        """Regression: Missing API key error omits setup guidance (bb6ab08)."""
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
         with pytest.raises(ValueError) as exc_info:
