@@ -16,6 +16,13 @@ _TRANSLATED_FONT_SIZES = (46, 44, 42)
 _ORIGINAL_FONT_SIZES = (26, 24, 22)
 _TRANSLATED_LINE_HEIGHT = 1.18
 _ORIGINAL_LINE_HEIGHT = 1.18
+_PORTRAIT_TRANSLATED_FONT_SIZE = 37
+_PORTRAIT_ORIGINAL_FONT_SIZE = 29
+_PORTRAIT_TRANSLATED_BOTTOM = 938
+_PORTRAIT_LANGUAGE_GAP = 10
+_PORTRAIT_EDGE_MARGIN = 30
+_LINE_END_PUNCTUATION = tuple("，。！？、；：,.!?;:")  # noqa: RUF001
+_NON_PUNCTUATION_BREAK_PENALTY = 0.1
 
 
 def serialize_bilingual_ass(
@@ -37,15 +44,15 @@ def serialize_bilingual_ass(
         ASS format string with bilingual subtitles
 
     Raises:
-        ValueError: If subtitles have mismatched number of entries
-
-    Note:
-        video_width and video_height parameters are accepted for API compatibility
-        but no longer used internally. PlayRes is fixed at 1920x1080 for consistent
-        rendering across all video resolutions.
+        ValueError: If video dimensions are not positive or subtitles have
+            mismatched numbers of entries.
     """
-    # Kept for API compatibility - suppress vulture warnings
-    _ = (video_width, video_height)
+    if video_width <= 0 or video_height <= 0:
+        raise ValueError("Video dimensions must be positive")
+
+    # libass scales glyphs by PlayResY on both axes, so only the canvas width
+    # follows the aspect ratio to preserve font proportions and relative size.
+    play_res_x = max(1, round(_PLAY_RES_Y * video_width / video_height))
 
     if len(original.entries) != len(translated.entries):
         raise ValueError(
@@ -81,8 +88,8 @@ def serialize_bilingual_ass(
     header = f"""[Script Info]
 Title: Bilingual Subtitle
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: {play_res_x}
+PlayResY: {_PLAY_RES_Y}
 
 [V4+ Styles]
 {style_format}
@@ -102,12 +109,14 @@ PlayResY: 1080
         start_time = _format_ass_time(orig_entry.start)
         end_time = _format_ass_time(orig_entry.end)
 
-        layout = _layout_bilingual_pair(trans_entry.text, orig_entry.text)
+        layout = _layout_bilingual_pair(
+            trans_entry.text, orig_entry.text, play_res_x=play_res_x
+        )
 
         # Add translated line (top of the grouped subtitle block)
         trans_text = _escape_ass_text(layout.translated_text)
         trans_override = (
-            f"{{\\an8\\pos({layout.x},{layout.translated_y})"
+            f"{{\\an{layout.translated_alignment}\\pos({layout.x},{layout.translated_y})"
             f"\\fs{layout.translated_font_size}\\q2}}"
         )
         dialogue_lines.append(
@@ -138,16 +147,24 @@ class _SubtitleLayout:
     x: int
     translated_y: int
     original_y: int
+    translated_alignment: int = 8
 
 
-def _layout_bilingual_pair(translated_text: str, original_text: str) -> _SubtitleLayout:
-    """Return wrapped text and top-anchored positions for one bilingual pair."""
+def _layout_bilingual_pair(
+    translated_text: str, original_text: str, *, play_res_x: int
+) -> _SubtitleLayout:
+    """Return wrapped text and anchor positions for one bilingual pair."""
+    if play_res_x < _PLAY_RES_Y:
+        return _layout_portrait_pair(
+            translated_text, original_text, play_res_x=play_res_x
+        )
     best_layout: _SubtitleLayout | None = None
+    max_width = _SUBTITLE_MAX_WIDTH * play_res_x / _PLAY_RES_X
     for trans_size, orig_size in zip(
         _TRANSLATED_FONT_SIZES, _ORIGINAL_FONT_SIZES, strict=True
     ):
-        trans_wrapped = _wrap_text(translated_text, trans_size)
-        orig_wrapped = _wrap_text(original_text, orig_size)
+        trans_wrapped = _wrap_text(translated_text, trans_size, max_width=max_width)
+        orig_wrapped = _wrap_text(original_text, orig_size, max_width=max_width)
         trans_lines = trans_wrapped.count("\n") + 1
         orig_lines = orig_wrapped.count("\n") + 1
         trans_height = ceil(trans_lines * trans_size * _TRANSLATED_LINE_HEIGHT)
@@ -165,7 +182,7 @@ def _layout_bilingual_pair(translated_text: str, original_text: str) -> _Subtitl
             original_text=orig_wrapped,
             translated_font_size=trans_size,
             original_font_size=orig_size,
-            x=_PLAY_RES_X // 2,
+            x=play_res_x // 2,
             translated_y=trans_y,
             original_y=trans_y + trans_height + _SUBTITLE_LINE_GAP,
         )
@@ -178,7 +195,91 @@ def _layout_bilingual_pair(translated_text: str, original_text: str) -> _Subtitl
     return best_layout
 
 
-def _wrap_text(text: str, font_size: int) -> str:
+def _layout_portrait_pair(
+    translated_text: str, original_text: str, *, play_res_x: int
+) -> _SubtitleLayout:
+    """Keep the language boundary stable, moving it up for long original cues."""
+    max_width = _SUBTITLE_MAX_WIDTH * play_res_x / _PLAY_RES_X
+    for translated_size in range(_PORTRAIT_TRANSLATED_FONT_SIZE, 0, -1):
+        original_size = max(
+            1,
+            round(
+                translated_size
+                * _PORTRAIT_ORIGINAL_FONT_SIZE
+                / _PORTRAIT_TRANSLATED_FONT_SIZE
+            ),
+        )
+        translated = _wrap_portrait_text(translated_text, translated_size, max_width)
+        original = _wrap_portrait_text(original_text, original_size, max_width)
+        translated_height = ceil(
+            (translated.count("\n") + 1) * translated_size * _TRANSLATED_LINE_HEIGHT
+        )
+        original_height = ceil(
+            (original.count("\n") + 1) * original_size * _ORIGINAL_LINE_HEIGHT
+        )
+        original_y = min(
+            _PORTRAIT_TRANSLATED_BOTTOM + _PORTRAIT_LANGUAGE_GAP,
+            _PLAY_RES_Y - _PORTRAIT_EDGE_MARGIN - original_height,
+        )
+        translated_bottom = original_y - _PORTRAIT_LANGUAGE_GAP
+        if translated_bottom - translated_height >= _PORTRAIT_EDGE_MARGIN:
+            return _SubtitleLayout(
+                translated_text=translated,
+                original_text=original,
+                translated_font_size=translated_size,
+                original_font_size=original_size,
+                x=play_res_x // 2,
+                translated_y=translated_bottom,
+                original_y=original_y,
+                translated_alignment=2,
+            )
+    raise ValueError("Subtitle text cannot fit within the portrait canvas")
+
+
+def _wrap_portrait_text(text: str, font_size: int, max_width: float) -> str:
+    """Balance lines and prefer punctuation boundaries without changing cue text."""
+    wrapped_lines: list[str] = []
+    for raw_line in text.splitlines() or [""]:
+        units = [
+            part
+            for unit in _split_wrap_units(raw_line)
+            for part in (
+                list(unit)
+                if _estimate_text_width(unit, font_size) > max_width
+                else [unit]
+            )
+        ]
+        costs = [float("inf")] * (len(units) + 1)
+        breaks = [len(units)] * len(units)
+        costs[-1] = 0
+        for start in range(len(units) - 1, -1, -1):
+            line = ""
+            for end in range(start + 1, len(units) + 1):
+                line += units[end - 1]
+                width = _estimate_text_width(line.strip(), font_size)
+                if width > max_width and end > start + 1:
+                    break
+                penalty = 0.0
+                if end < len(units):
+                    if units[end].lstrip().startswith(_LINE_END_PUNCTUATION):
+                        continue
+                    if not line.rstrip().endswith(_LINE_END_PUNCTUATION):
+                        penalty = max_width**2 * _NON_PUNCTUATION_BREAK_PENALTY
+                cost = (max_width - width) ** 2 + penalty + costs[end]
+                if cost < costs[start]:
+                    costs[start] = cost
+                    breaks[start] = end
+        start = 0
+        while start < len(units):
+            end = breaks[start]
+            wrapped_lines.append("".join(units[start:end]).strip())
+            start = end
+        if not units:
+            wrapped_lines.append("")
+    return "\n".join(wrapped_lines)
+
+
+def _wrap_text(text: str, font_size: int, *, max_width: float) -> str:
     """Wrap text to a rough ASS pixel width using language-aware units."""
     lines = []
     for raw_line in text.splitlines() or [""]:
@@ -187,7 +288,7 @@ def _wrap_text(text: str, font_size: int) -> str:
         current_width = 0.0
         for unit in units:
             unit_width = _estimate_text_width(unit, font_size)
-            if current and current_width + unit_width > _SUBTITLE_MAX_WIDTH:
+            if current and current_width + unit_width > max_width:
                 lines.append(current.rstrip())
                 current = unit.lstrip()
                 current_width = _estimate_text_width(current, font_size)

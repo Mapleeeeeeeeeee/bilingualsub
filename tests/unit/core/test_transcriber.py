@@ -5,10 +5,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from bilingualsub.core.segmentation import split_long_entries
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.transcriber import (
     TranscriptionError,
-    _split_long_entries,
     build_whisper_prompt,
     transcribe_audio,
 )
@@ -563,7 +563,7 @@ class TestWhisperPrompt:
 
 @pytest.mark.unit
 class TestSplitLongEntries:
-    """Test cases for _split_long_entries function."""
+    """Test cases for split_long_entries function."""
 
     def test_no_split_needed_for_short_entries(self):
         entry = SubtitleEntry(
@@ -572,7 +572,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=4),
             text="Hello world",
         )
-        res = _split_long_entries([entry])
+        res = split_long_entries([entry])
         assert len(res) == 1
         assert res[0].text == "Hello world"
         assert res[0].start == timedelta(seconds=0)
@@ -586,7 +586,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=10),
             text="First sentence. Second sentence! Third sentence?",
         )
-        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        res = split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
         assert len(res) == 3
         assert res[0].text == "First sentence."
         assert res[1].text == "Second sentence!"
@@ -604,7 +604,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=10),
             text="This is first clause, and this is second clause, plus third clause",
         )
-        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        res = split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
         assert len(res) == 3
         assert res[0].text == "This is first clause,"
         assert res[1].text == "and this is second clause,"
@@ -618,7 +618,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=10),
             text="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15",
         )
-        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
+        res = split_long_entries([entry], max_duration_sec=6.0, max_chars=80)
         assert len(res) == 2
         assert res[0].text == "word1 word2 word3 word4 word5 word6 word7 word8 word9"
         assert res[1].text == "word10 word11 word12 word13 word14 word15"
@@ -631,7 +631,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=10),
             text="一二三四五六七八九十一二三四五六七八九十",
         )
-        res = _split_long_entries([entry], max_duration_sec=6.0, max_chars=15)
+        res = split_long_entries([entry], max_duration_sec=6.0, max_chars=15)
         assert len(res) == 2
         assert res[0].text == "一二三四五六七八九十一二"
         assert res[1].text == "三四五六七八九十"
@@ -644,7 +644,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=8),
             text="short one, short two, this is a very long third clause indeed",
         )
-        res = _split_long_entries(
+        res = split_long_entries(
             [entry], max_duration_sec=6.0, max_chars=80, min_words=4
         )
         assert len(res) == 2
@@ -659,7 +659,7 @@ class TestSplitLongEntries:
             end=timedelta(seconds=10),
             text="short one, short two",
         )
-        res = _split_long_entries(
+        res = split_long_entries(
             [entry], max_duration_sec=6.0, max_chars=80, min_words=4
         )
         assert len(res) == 2

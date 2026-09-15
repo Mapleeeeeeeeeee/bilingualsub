@@ -11,6 +11,7 @@ from bilingualsub.api.jobs import Job
 from bilingualsub.api.pipeline import run_burn, run_download, run_subtitle
 from bilingualsub.core.downloader import DownloadError, VideoMetadata
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
+from bilingualsub.formats import parse_srt
 from bilingualsub.utils.ffmpeg import FFmpegError
 
 
@@ -267,6 +268,77 @@ class TestRunDownload:
 @pytest.mark.unit
 @pytest.mark.asyncio
 class TestRunSubtitle:
+    @pytest.mark.parametrize("manual", [True, False], ids=["platform", "asr"])
+    @pytest.mark.parametrize("portrait", [True, False], ids=["portrait", "landscape"])
+    async def test_given_long_cue_portrait_translation_preserves_paired_segments(
+        self, tmp_path: Path, manual: bool, portrait: bool
+    ) -> None:
+        """Regression: portrait cues remain too long before translation (6e50ae3)."""
+        source = Subtitle(
+            entries=[
+                SubtitleEntry(
+                    1,
+                    timedelta(seconds=1),
+                    timedelta(seconds=7),
+                    "We build reliable tools, then we test each tool.",
+                ),
+                SubtitleEntry(2, timedelta(seconds=8), timedelta(seconds=10), "Done."),
+            ]
+        )
+        translated_inputs: list[Subtitle] = []
+
+        def translate(subtitle: Subtitle, **kwargs: object) -> Subtitle:
+            translated_inputs.append(subtitle)
+            return Subtitle(
+                entries=[
+                    SubtitleEntry(
+                        entry.index, entry.start, entry.end, f"翻譯{entry.index}"
+                    )
+                    for entry in subtitle.entries
+                ]
+            )
+
+        job = _make_job()
+        job.video_width, job.video_height = (720, 1280) if portrait else (1920, 1080)
+        job.output_files[FileType.AUDIO] = tmp_path / "audio.mp3"
+        with (
+            patch(
+                "bilingualsub.api.pipeline.fetch_manual_subtitle",
+                return_value=source if manual else None,
+            ),
+            patch("bilingualsub.api.pipeline.transcribe_audio", return_value=source),
+            patch(
+                "bilingualsub.api.pipeline.translate_subtitle", side_effect=translate
+            ),
+        ):
+            await run_subtitle(job)
+
+        assert job.status == JobStatus.COMPLETED
+        expected_texts = (
+            ["We build reliable tools,", "then we test each tool.", "Done."]
+            if portrait
+            else [source.entries[0].text, "Done."]
+        )
+        actual = translated_inputs[0].entries
+        assert [entry.text for entry in actual] == expected_texts
+        assert actual[0].start == timedelta(seconds=1)
+        assert actual[-2].end == timedelta(seconds=7)
+        assert actual[-1].start == timedelta(seconds=8)
+        assert actual[-1].end == timedelta(seconds=10)
+        if portrait:
+            assert actual[0].end == actual[1].start
+        merged = parse_srt(job.output_files[FileType.SRT].read_text())
+        assert [entry.text for entry in merged.entries] == [
+            f"翻譯{index}\n{text}" for index, text in enumerate(expected_texts, start=1)
+        ]
+        for merged_entry, source_entry in zip(merged.entries, actual, strict=True):
+            assert merged_entry.start.total_seconds() == pytest.approx(
+                source_entry.start.total_seconds(), abs=0.001
+            )
+            assert merged_entry.end.total_seconds() == pytest.approx(
+                source_entry.end.total_seconds(), abs=0.001
+            )
+
     @patch("bilingualsub.api.pipeline.serialize_bilingual_ass")
     @patch("bilingualsub.api.pipeline.serialize_srt")
     @patch("bilingualsub.api.pipeline.merge_subtitles")
@@ -341,6 +413,34 @@ def _make_burn_job(tmp_path: Path, *, channel: str = "TestChannel") -> Job:
 @pytest.mark.asyncio
 class TestRunBurn:
     """Tests for run_burn watermark, intro, concat, and degradation logic."""
+
+    async def test_given_edited_portrait_cue_burn_keeps_user_timing(
+        self, tmp_path: Path
+    ) -> None:
+        """Edited cues retain their timing even when longer than portrait limits."""
+        job = _make_burn_job(tmp_path, channel="")
+        job.video_width, job.video_height = 720, 1280
+        edited_srt = "1\n00:00:01,250 --> 00:00:09,750\n使用者指定的長字幕\nThe user chose this long subtitle timing.\n"
+        burned_files: list[str] = []
+
+        def burn(source: Path, subtitle: Path, output: Path, **kwargs: object) -> Path:
+            burned_files.append(subtitle.read_text())
+            return output
+
+        with patch("bilingualsub.api.pipeline.burn_subtitles", side_effect=burn):
+            await run_burn(job, edited_srt)
+
+        assert job.status == JobStatus.COMPLETED
+        dialogues = [
+            line
+            for line in burned_files[0].splitlines()
+            if line.startswith("Dialogue:")
+        ]
+        assert len(dialogues) == 2
+        assert [line.split(",")[1:3] for line in dialogues] == [
+            ["0:00:01.25", "0:00:09.75"],
+            ["0:00:01.25", "0:00:09.75"],
+        ]
 
     @patch("bilingualsub.api.pipeline.concat_videos")
     @patch("bilingualsub.api.pipeline.generate_intro")
