@@ -1,5 +1,0 @@
-Project: https://github.com/fxsjy/jieba
-Commit: 67fa2e36e72f69d9134b8a1037b83fbb070b9775
-Dictionary: https://github.com/fxsjy/jieba/blob/67fa2e36e72f69d9134b8a1037b83fbb070b9775/extra_dict/dict.txt.big
-License: MIT (see LICENSE)
-The dictionary is unmodified upstream data, bundled for offline Traditional Chinese word segmentation.

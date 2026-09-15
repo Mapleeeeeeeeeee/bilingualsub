@@ -1,20 +1,10 @@
 """ASS (Advanced SubStation Alpha) format serializer for bilingual subtitles."""
 
-import warnings
 from dataclasses import dataclass
 from datetime import timedelta
-from itertools import groupby
 from math import ceil
-from pathlib import Path
 
 from bilingualsub.core.subtitle import Subtitle
-
-# jieba 0.42.1 uses non-raw regex literals that warn during Python 3.12+ compilation.
-with warnings.catch_warnings():
-    warnings.filterwarnings(
-        "ignore", message=r"invalid escape sequence '\\[.s]'", category=SyntaxWarning
-    )
-    import jieba
 
 _PLAY_RES_X = 1920
 _PLAY_RES_Y = 1080
@@ -33,9 +23,6 @@ _PORTRAIT_LANGUAGE_GAP = 10
 _PORTRAIT_EDGE_MARGIN = 30
 _LINE_END_PUNCTUATION = tuple("，。！？、；：,.!?;:")  # noqa: RUF001
 _NON_PUNCTUATION_BREAK_PENALTY = 0.1
-_CHINESE_TOKENIZER = jieba.Tokenizer(
-    str(Path(__file__).with_name("data") / "jieba" / "dict.txt.big")
-)
 
 
 def serialize_bilingual_ass(
@@ -255,7 +242,7 @@ def _wrap_portrait_text(text: str, font_size: int, max_width: float) -> str:
     for raw_line in text.splitlines() or [""]:
         units = [
             part
-            for unit in _split_portrait_wrap_units(raw_line)
+            for unit in _split_wrap_units(raw_line)
             for part in (
                 list(unit)
                 if _estimate_text_width(unit, font_size) > max_width
@@ -290,18 +277,6 @@ def _wrap_portrait_text(text: str, font_size: int, max_width: float) -> str:
         if not units:
             wrapped_lines.append("")
     return "\n".join(wrapped_lines)
-
-
-def _split_portrait_wrap_units(text: str) -> list[str]:
-    """Keep dictionary words intact while preserving mixed-language content."""
-    units: list[str] = []
-    for is_chinese, characters in groupby(text, key=_is_cjk):
-        run = "".join(characters)
-        if is_chinese:
-            units.extend(_CHINESE_TOKENIZER.lcut(run, cut_all=False, HMM=True))
-        else:
-            units.extend(_split_wrap_units(run))
-    return units
 
 
 def _wrap_text(text: str, font_size: int, *, max_width: float) -> str:
