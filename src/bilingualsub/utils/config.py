@@ -60,7 +60,11 @@ def get_settings() -> Settings:
 
 def _require_api_key(value: str, env_var: str) -> str:
     if not value:
-        raise ValueError(f"{env_var} environment variable is not set.")
+        service_name = env_var.removesuffix("_API_KEY").title()
+        raise ValueError(
+            f"{env_var} environment variable is not set. "
+            f"Please set it with your {service_name} API key."
+        )
     return value
 
 
