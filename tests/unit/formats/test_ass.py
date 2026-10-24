@@ -2,7 +2,6 @@
 
 import re
 from datetime import timedelta
-from math import ceil
 
 import pytest
 
@@ -10,17 +9,24 @@ from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.formats.ass import serialize_bilingual_ass
 
 
-def _dialogue_position(result: str, style: str) -> tuple[int, int, int]:
+def _dialogue_alignment(result: str, style: str) -> int:
     match = re.search(
         rf"Dialogue: 0,[^,]+,[^,]+,{style},,0,0,0,,"
-        rf"\{{\\an([28])\\pos\((\d+),(\d+)\)\\fs(\d+)\\q2\}}",
+        rf"\{{\\an([28])\\pos\(\d+,\d+\)\\fs\d+\\q2\}}",
         result,
     )
     assert match is not None
-    alignment, x, y, size = map(int, match.groups())
-    if alignment == 2:
-        line_count = _dialogue_text(result, style).count(r"\N") + 1
-        y -= ceil(line_count * size * 1.18)
+    return int(match.group(1))
+
+
+def _dialogue_position(result: str, style: str) -> tuple[int, int, int]:
+    match = re.search(
+        rf"Dialogue: 0,[^,]+,[^,]+,{style},,0,0,0,,"
+        rf"\{{\\an[28]\\pos\((\d+),(\d+)\)\\fs(\d+)\\q2\}}",
+        result,
+    )
+    assert match is not None
+    x, y, size = map(int, match.groups())
     return x, y, size
 
 
@@ -582,8 +588,8 @@ def test_when_portrait_cue_changes_length_then_bilingual_boundary_stays_compact(
     assert translated is not None, "Chinese lines should grow above a stable boundary"
     _, original_y, original_size = _dialogue_position(result, "Original")
     translated_bottom, translated_size = map(int, translated.groups())
-    assert 935 <= translated_bottom <= 940
-    assert 8 <= original_y - translated_bottom <= 12
+    assert translated_bottom == 938
+    assert original_y - translated_bottom == 10
     assert translated_size == 37
     assert original_size == 29
     assert (
@@ -601,9 +607,18 @@ def test_when_portrait_cue_changes_length_then_bilingual_boundary_stays_compact(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("style", ["Translated", "Original"])
+@pytest.mark.parametrize(
+    ("style", "expected_landscape_lines", "expected_portrait_lines"),
+    [
+        ("Original", 2, 7),
+        ("Translated", 2, 5),
+    ],
+)
 def test_given_portrait_video_long_subtitles_wrap_more_than_landscape(
-    long_bilingual_pair: tuple[Subtitle, Subtitle], style: str
+    long_bilingual_pair: tuple[Subtitle, Subtitle],
+    style: str,
+    expected_landscape_lines: int,
+    expected_portrait_lines: int,
 ) -> None:
     """Regression: portrait videos reuse landscape subtitle wrapping (68ce84f)."""
     landscape = serialize_bilingual_ass(
@@ -613,46 +628,64 @@ def test_given_portrait_video_long_subtitles_wrap_more_than_landscape(
         *long_bilingual_pair, video_width=720, video_height=1280
     )
 
-    assert _dialogue_text(portrait, style).count(r"\N") > _dialogue_text(
-        landscape, style
-    ).count(r"\N")
+    assert _dialogue_text(landscape, style).count(r"\N") + 1 == expected_landscape_lines
+    assert _dialogue_text(portrait, style).count(r"\N") + 1 == expected_portrait_lines
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    ("video_width", "video_height"),
-    [(720, 1280), (1080, 1920), (1080, 1080), (1440, 1080), (1920, 1080)],
+    ("video_width", "video_height", "expected_canvas_width"),
+    [
+        (720, 1280, 608),
+        (1080, 1920, 608),
+        (1080, 1080, 1080),
+        (1440, 1080, 1440),
+        (1920, 1080, 1920),
+    ],
 )
 def test_given_video_shape_subtitles_keep_proportions_and_centered_complete_pair(
     long_bilingual_pair: tuple[Subtitle, Subtitle],
     video_width: int,
     video_height: int,
+    expected_canvas_width: int,
 ) -> None:
     """Regression: subtitle canvas ignores portrait and square video shape (68ce84f)."""
     result = serialize_bilingual_ass(
         *long_bilingual_pair, video_width=video_width, video_height=video_height
     )
     canvas_width, canvas_height = _canvas_size(result)
-    assert canvas_width == pytest.approx(
-        canvas_height * video_width / video_height, abs=1
-    )
+    assert canvas_width == expected_canvas_width
 
     for style, subtitle in zip(
         ("Original", "Translated"), long_bilingual_pair, strict=True
     ):
+        alignment = _dialogue_alignment(result, style)
         x, y, font_size = _dialogue_position(result, style)
         assert x == pytest.approx(canvas_width / 2, abs=1)
         text = _dialogue_text(result, style)
         assert "".join(text.replace(r"\N", " ").split()) == "".join(
             subtitle.entries[0].text.split()
         )
-        assert 0 <= y < canvas_height
-        assert y + (text.count(r"\N") + 1) * font_size < canvas_height
+        line_count = text.count(r"\N") + 1
+        if alignment == 2:
+            assert 0 <= y < canvas_height
+            assert y - line_count * font_size >= 0
+        else:
+            assert 0 <= y < canvas_height
+            assert y + line_count * font_size < canvas_height
 
+    trans_align = _dialogue_alignment(result, "Translated")
     _, translated_y, translated_size = _dialogue_position(result, "Translated")
     _, original_y, _ = _dialogue_position(result, "Original")
     translated_lines = _dialogue_text(result, "Translated").count(r"\N") + 1
-    assert translated_y + translated_lines * translated_size < original_y
+
+    if trans_align == 2:
+        # Portrait: Translated is bottom-anchored; Original is top-anchored below it
+        assert translated_y < original_y
+        assert original_y - translated_y >= 10
+    else:
+        # Landscape: Both are top-anchored; Translated is positioned above Original
+        assert translated_y + translated_lines * translated_size < original_y
 
 
 @pytest.mark.unit

@@ -204,10 +204,10 @@ class TestGenerateIntro:
         command = _get_popen_cmd(mock_intro_ffmpeg["popen"])
         filters = command[command.index("-vf") + 1]
         content = re.findall(
-            r":fontsize=(\d+):fontcolor=white@[\d.]+:x=72:y=(\d+):", filters
+            r":fontsize=(\d+):fontcolor=white@[\d.]+:x=([^:]+):y=(\d+):", filters
         )
         assert content
-        assert max(int(y) + int(size) for size, y in content) < 1152
+        assert max(int(y) + int(size) for size, _, y in content) < 1152
 
     @pytest.mark.parametrize("width,height", [(720, 1280), (1080, 1920)])
     def test_when_portrait_then_long_attribution_wraps_without_changing_original_design(

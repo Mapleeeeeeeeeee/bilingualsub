@@ -5,17 +5,21 @@ from unittest.mock import Mock, patch
 
 import pytest
 from agno.models.openai import OpenAIChat
+from agno.run import RunStatus
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.core.translator import (
     _PROXY_PLACEHOLDER_API_KEY,
+    RateLimitError,
     RetranslateEntry,
     RetranslateResult,
     TranslationError,
     _build_model,
+    _extract_response_content,
     _parse_batch_response,
     _parse_retranslate_response,
     _repair_cjk_split_boundaries,
+    _translate_one_by_one,
     retranslate_entries,
     translate_subtitle,
 )
@@ -973,41 +977,133 @@ class TestBuildModel:
 
 @pytest.mark.unit
 class TestCjkBoundaryRepair:
-    def test_repair_cjk_split_boundaries(self):
-        # Test case 1: leading "的問題" with punctuation
-        inputs = [
-            "有一整類以前大家根本不曾想過",
-            "的問題，現在用 Fable 都有機會解決了。",
-        ]
-        expected = [
-            "有一整類以前大家根本不曾想過的問題，",
-            "現在用 Fable 都有機會解決了。",
-        ]
+    @pytest.mark.parametrize(
+        ("inputs", "expected"),
+        [
+            (
+                [
+                    "有一整類以前大家根本不曾想過",
+                    "的問題，現在用 Fable 都有機會解決了。",
+                ],
+                [
+                    "有一整類以前大家根本不曾想過的問題，",
+                    "現在用 Fable 都有機會解決了。",
+                ],
+            ),
+            (
+                ["我們看到一大類", "的挑戰。"],
+                ["我們看到一大類的", "挑戰。"],
+            ),
+            (
+                ["想過，", "的問題，現在用 Fable..."],
+                ["想過的問題，", "現在用 Fable..."],
+            ),
+            (
+                ["前一句", "的確如此。"],
+                ["前一句", "的確如此。"],
+            ),
+            (
+                ["前一句", "的士來了。"],
+                ["前一句", "的士來了。"],
+            ),
+            (
+                ["前一句。", "的確也是這樣。"],
+                ["前一句。", "的確也是這樣。"],
+            ),
+            (
+                ["前一句？", "的問題很多。"],
+                ["前一句？", "的問題很多。"],
+            ),
+            (
+                ["前一句！", "的挑戰很多。"],
+                ["前一句！", "的挑戰很多。"],
+            ),
+            (
+                ["前一句", "的。"],
+                ["前一句", "的。"],
+            ),
+            (
+                ["前文", "的。下一句"],
+                ["前文的。", "下一句"],
+            ),
+        ],
+    )
+    def test_repair_cjk_split_boundaries(
+        self, inputs: list[str], expected: list[str]
+    ) -> None:
         assert _repair_cjk_split_boundaries(inputs) == expected
 
-        # Test case 2: leading "的" without punctuation
-        inputs2 = ["我們看到一大類", "的挑戰。"]
-        expected2 = ["我們看到一大類的", "挑戰。"]
-        assert _repair_cjk_split_boundaries(inputs2) == expected2
 
-        # Test case 3: prev has trailing punctuation
-        inputs3 = ["想過，", "的問題，現在用 Fable..."]
-        expected3 = ["想過的問題，", "現在用 Fable..."]
-        assert _repair_cjk_split_boundaries(inputs3) == expected3
+@pytest.mark.unit
+class TestExtractResponseContent:
+    """Test cases for response extraction and error handling."""
 
-        # Test case 4: no-op for words starting with "的確" or "的士"
-        inputs4 = ["前一句", "的確如此。"]
-        assert _repair_cjk_split_boundaries(inputs4) == inputs4
+    def test_given_valid_content_when_extract_then_returns_stripped_text(self):
+        resp = Mock(content="  translated text  ", status=RunStatus.completed)
+        assert _extract_response_content(resp) == "translated text"
 
-        # Test case 5: no-op after sentence-ending punctuation
-        inputs5 = ["前一句。", "的確也是這樣。"]
-        assert _repair_cjk_split_boundaries(inputs5) == inputs5
+    def test_given_empty_content_when_extract_then_raises_translation_error(self):
+        resp = Mock(content="   ", status=RunStatus.completed)
+        with pytest.raises(
+            TranslationError, match="Empty or whitespace-only translation"
+        ):
+            _extract_response_content(resp)
 
-        # Test case 6: no-op when remainder would be empty
-        inputs6 = ["前一句", "的。"]
-        assert _repair_cjk_split_boundaries(inputs6) == inputs6
+    def test_given_run_status_error_when_extract_then_raises_translation_error(self):
+        resp = Mock(
+            content="unknown provider for model bilingualsub-gemini-flash",
+            status=RunStatus.error,
+        )
+        with pytest.raises(
+            TranslationError, match="Translator run failed: unknown provider"
+        ):
+            _extract_response_content(resp)
 
-        # Test case 7: preserve period punctuation
-        inputs7 = ["前文", "的。下一句"]
-        expected7 = ["前文的。", "下一句"]
-        assert _repair_cjk_split_boundaries(inputs7) == expected7
+    def test_given_string_status_error_when_extract_then_raises_translation_error(self):
+        status_mock = Mock()
+        status_mock.value = "ERROR"
+        resp = Mock(content="Some failure", status=status_mock)
+        with pytest.raises(
+            TranslationError, match="Translator run failed: Some failure"
+        ):
+            _extract_response_content(resp)
+
+    def test_given_rate_limit_exceeded_when_extract_then_raises_rate_limit_error(self):
+        resp = Mock(
+            content="rate_limit_exceeded: Please try again in 5s",
+            status=RunStatus.completed,
+        )
+        with pytest.raises(RateLimitError):
+            _extract_response_content(resp)
+
+    def test_given_api_error_pattern_when_extract_then_raises_translation_error(self):
+        resp = Mock(
+            content="unknown provider for model some-model",
+            status=RunStatus.completed,
+        )
+        with pytest.raises(TranslationError, match="Translator returned API error"):
+            _extract_response_content(resp)
+
+    def test_given_one_by_one_with_run_status_error_when_translate_then_raises_error(
+        self,
+    ):
+        mock_translator = Mock()
+        mock_translator.run.return_value = Mock(
+            content="unknown provider for model bilingualsub-gemini-flash",
+            status=RunStatus.error,
+        )
+        batch = [
+            SubtitleEntry(
+                index=1,
+                start=timedelta(seconds=0),
+                end=timedelta(seconds=2),
+                text="Hello world",
+            )
+        ]
+        with pytest.raises(TranslationError, match="Translator run failed"):
+            _translate_one_by_one(
+                mock_translator,
+                batch,
+                source_lang="en",
+                target_lang="zh-TW",
+            )
