@@ -3,16 +3,16 @@
 # Check if we should start the proxy (either secret variables are set, or the directory already contains files)
 if [ -n "$CLIPROXY_ANTIGRAVITY_JSON" ] || [ -n "$CLIPROXY_CODEX_JSON" ]; then
   echo "Proxy credentials found. Initializing backend api helper..."
-  
+
   mkdir -p /tmp/.engine-api
-  
+
   if [ -n "$CLIPROXY_ANTIGRAVITY_JSON" ]; then
     echo "$CLIPROXY_ANTIGRAVITY_JSON" > /tmp/.engine-api/antigravity-mapleee723@gmail.com.json
   fi
   if [ -n "$CLIPROXY_CODEX_JSON" ]; then
     echo "$CLIPROXY_CODEX_JSON" > /tmp/.engine-api/codex-acforgptonly@gmail.com-pro.json
   fi
-  
+
   cat <<EOF > /tmp/config.yaml
 host: "127.0.0.1"
 port: 8317
@@ -24,18 +24,22 @@ logging-to-file: false
 usage-statistics-enabled: false
 oauth-model-alias:
   antigravity:
-    - name: "gemini-3.5-flash-low"
+    - name: "gemini-3.8-flash-high"
       alias: "bilingualsub-gemini-flash"
+      fork: true
+      force-mapping: true
+    - name: "gemini-3.8-flash-high"
+      alias: "gemini-3.8-flash-low"
       fork: true
       force-mapping: true
 EOF
 
   # Start the renamed binary (engine-api) in the background with config.yaml
   engine-api -config /tmp/config.yaml &
-  
+
   # Configure bilingualsub to use the local proxy
   export OPENAI_BASE_URL="http://127.0.0.1:8317/v1"
-  export OPENAI_API_KEY="bilingualsub-local"
+  export OPENAI_API_KEY="bilingualsub-local"  # pragma: allowlist secret
   export TRANSLATOR_MODEL="openai:bilingualsub-gemini-flash"
   echo "Backend API helper started. Routing translation requests."
 else

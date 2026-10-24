@@ -78,7 +78,7 @@ into the image or committed to the repository.
 The proxy port is bound to `127.0.0.1` only; the compose stack uses the fixed
 local bearer key `bilingualsub-local` internally.
 
-The default alias maps to Antigravity's `gemini-3.5-flash-low`, which is the
+The default alias maps to Antigravity's `gemini-3.8-flash-high` (accessible via alias `gemini-3.8-flash-low` or `bilingualsub-gemini-flash`), which is the
 most consistently discoverable Flash variant in current CLIProxyAPI releases.
 If the alias does not exist in your version, list the available proxy models
 and set `TRANSLATOR_MODEL=openai:<model-id>` in `.env`:

@@ -11,6 +11,7 @@ import structlog
 from agno.agent import Agent
 from agno.models.base import Model
 from agno.models.openai import OpenAIChat
+from agno.run import RunStatus
 
 from bilingualsub.core.subtitle import Subtitle, SubtitleEntry
 from bilingualsub.utils.config import (
@@ -277,6 +278,49 @@ def _check_rate_limit(response_text: str) -> None:
     raise RateLimitError(retry_after=retry_after, message=response_text)
 
 
+def _extract_response_content(response: object) -> str:
+    """Extract and validate text content from an Agno response.
+
+    Args:
+        response: Agno RunOutput or response object.
+
+    Returns:
+        Stripped response text.
+
+    Raises:
+        RateLimitError: If rate limit is detected in content/status.
+        TranslationError: If agent returned an error status, empty text, or API error.
+    """
+    status = getattr(response, "status", None)
+    is_error = status is not None and (
+        status == RunStatus.error
+        or getattr(status, "value", None) == "ERROR"
+        or getattr(status, "name", None) == "error"
+    )
+
+    content = getattr(response, "content", None)
+    text = content.strip() if isinstance(content, str) else ""
+
+    if is_error:
+        error_msg = text or str(getattr(response, "error", "") or "Agent run failed")
+        _check_rate_limit(error_msg)
+        raise TranslationError(f"Translator run failed: {error_msg}")
+
+    if not text:
+        raise TranslationError("Empty or whitespace-only translation response")
+
+    _check_rate_limit(text)
+
+    if re.search(
+        r"\b(?:unknown provider for model|internal_server_error|api status error)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        raise TranslationError(f"Translator returned API error: {text}")
+
+    return text
+
+
 def _parse_batch_response(response_text: str, expected_count: int) -> list[str]:
     """Parse numbered batch translation response into a list of translated strings.
 
@@ -376,11 +420,7 @@ def _translate_batch(
     started_at = time.monotonic()
     response = translator.run(prompt)
     duration_ms = round((time.monotonic() - started_at) * 1000)
-    response_text = response.content.strip() if response.content else ""
-    if not response_text:
-        raise TranslationError("Empty batch translation response")
-
-    _check_rate_limit(response_text)
+    response_text = _extract_response_content(response)
 
     logger.debug(
         "translation_batch_response",
@@ -422,17 +462,13 @@ def _translate_one_by_one(
             response = translator.run(
                 f"將這段字幕從{source_lang}翻譯成{target_lang}：{entry.text}"  # noqa: RUF001
             )
+            translated_text = _extract_response_content(response)
+        except TranslationError:
+            raise
         except Exception as exc:
             raise TranslationError(
                 f"Failed to translate entry {entry.index}: {entry.text}"
             ) from exc
-        translated_text = response.content.strip() if response.content else ""
-        _check_rate_limit(translated_text)
-        if not translated_text:
-            raise TranslationError(
-                f"Empty or whitespace-only translation for entry "
-                f"{entry.index}: {entry.text}"
-            )
         logger.debug(
             "translation_one_by_one_entry_completed",
             index=entry.index,
@@ -823,12 +859,7 @@ def retranslate_entries(
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 response = translator.run(prompt)
-                response_text = response.content.strip() if response.content else ""
-                if not response_text:
-                    raise TranslationError(
-                        f"Empty re-translation response for entry {target_index}"
-                    )
-                _check_rate_limit(response_text)
+                response_text = _extract_response_content(response)
                 results[target_index] = _parse_retranslate_response(
                     response_text,
                     expected_index=target_index,

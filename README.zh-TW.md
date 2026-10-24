@@ -66,7 +66,7 @@ BilingualSub 會跑在 http://localhost:7860。它會透過 compose network 連�
 到 repo。proxy 對 host 只綁定 `127.0.0.1`；compose stack 內部固定使用本機
 bearer key `bilingualsub-local`。
 
-預設 alias 對應 Antigravity 的 `gemini-3.5-flash-low`，這是目前 CLIProxyAPI
+預設 alias 對應 Antigravity 的 `gemini-3.8-flash-high`（並提供 `gemini-3.8-flash-low` 與 `bilingualsub-gemini-flash` 別名），這是目前 CLIProxyAPI
 版本中較穩定可發現的 Flash 變體。如果你的版本沒有這個 alias，可以列出可用
 模型，並在 `.env` 設定 `TRANSLATOR_MODEL=openai:<model-id>`：
 

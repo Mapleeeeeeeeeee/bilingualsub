@@ -87,6 +87,7 @@ frontend/.vite/
 
 # Claude Code
 .claude/settings.local.json
+.claude/types/
 
 # Logs
 *.log

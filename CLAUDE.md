@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> [!IMPORTANT]
+> **本專案之 Docker 容器群（bilingualsub、cli-proxy）與相關映像檔屬於受保護環境，禁止刪除或執行破壞性清理。**
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 專案概述

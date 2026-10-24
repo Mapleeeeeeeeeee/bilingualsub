@@ -1,7 +1,18 @@
+# ==============================================================================
+# === 個人核心工具：BilingualSub (嚴禁刪除 / PROTECTED) ===
+# 說明：雙語字幕生成與翻譯工具（Groq Whisper 語音辨識 + LLM 翻譯），依賴 cli-proxy
+# 警告：嚴禁執行 docker rm / rmi / prune 或清理此專案與 Volume！
+# ==============================================================================
+
 services:
   cli-proxy:
     image: eceasy/cli-proxy-api:latest
     restart: unless-stopped
+    labels:
+      - 'description=CLI Proxy API for BilingualSub (個人重要工具 - 嚴禁刪除)'
+      - 'protected=true'
+      - 'purpose=BilingualSub 之 API 代理服務'
+      - 'org.opencontainers.image.description=CLI Proxy API for BilingualSub (個人重要工具 - 嚴禁刪除)'
     ports:
       - '127.0.0.1:${CLIPROXY_PORT:-8317}:8317'
     volumes:
@@ -13,6 +24,11 @@ services:
     build: .
     image: bilingualsub:latest
     restart: unless-stopped
+    labels:
+      - 'description=BilingualSub 雙語字幕生成工具 (個人重要工具 - 嚴禁刪除)'
+      - 'protected=true'
+      - 'purpose=語音轉錄與雙語字幕生成'
+      - 'org.opencontainers.image.description=BilingualSub 雙語字幕生成工具 (個人重要工具 - 嚴禁刪除)'
     ports:
       - '${BILINGUALSUB_PORT:-7860}:7860'
     environment:
